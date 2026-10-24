@@ -3,8 +3,163 @@ import { moveToSAN, classicalRuleSet } from '@/core';
 import { scoreToCp, getMoveClassMeta, identifyOpening } from '@/analysis';
 import { solarAudio } from '@/audio/solar-audio';
 import { triggerReviewMoveEffects } from './reviewpanel';
+import { deleteGameFromHistory, getGameHistory, type GameRecord } from '@/storage/history';
+import { t } from '@/i18n';
+
+const ARCHIVE_ICONS = {
+  review: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M7 11l2-3 3 4 2-3"/>',
+  pgn: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
+  delete: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+};
+
+export function archiveIcon(name: keyof typeof ARCHIVE_ICONS): string {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ARCHIVE_ICONS[name]}</svg>`;
+}
+
+function escapeHistoryText(value: string): string {
+  const element = document.createElement('span');
+  element.textContent = value;
+  return element.innerHTML;
+}
+
+export interface HistoryArchiveOptions {
+  onBack: () => void;
+  onReview: (record: GameRecord) => void;
+}
+
+export class HistoryArchiveUI {
+  private filter: GameRecord['result'] | 'all' = 'all';
+  private list: HTMLElement;
+  private toast: HTMLElement;
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  private events = new AbortController();
+
+  constructor(private container: HTMLElement, private options: HistoryArchiveOptions) {
+    container.innerHTML = `<div class="archive-center">
+      <header class="archive-header">
+        <a href="#/" class="settings-back" id="history-back">${t('history.back')}</a>
+        <p class="settings-eyebrow">SOLAR CHESS / PGN</p>
+        <h1>${t('history.title')}</h1><p class="settings-intro">${t('history.intro')}</p>
+      </header>
+      <div class="archive-filters" role="group" aria-label="${t('history.title')}">
+        ${(['all', 'win', 'loss', 'draw'] as const).map((value, index) =>
+          `<button type="button" class="solar-btn-ghost" data-history-filter="${value}" aria-pressed="${index === 0}">${t(['history.all', 'history.wins', 'history.losses', 'history.draws'][index])}</button>`).join('')}
+      </div>
+      <div class="archive-list" aria-live="polite"></div>
+      <div class="archive-toast solar-card" role="status" hidden></div>
+    </div>`;
+    this.list = container.querySelector('.archive-list')!;
+    this.toast = container.querySelector('.archive-toast')!;
+    container.addEventListener('click', this.handleClick, { signal: this.events.signal });
+    this.refresh();
+  }
+
+  public refresh(): void {
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusedId = focused?.closest<HTMLElement>('.archive-card')?.dataset.gameId;
+    const focusedAction = focused?.dataset.historyAction;
+    const records = getGameHistory();
+    const visible = records.filter((record) => this.filter === 'all' || record.result === this.filter);
+    this.list.replaceChildren();
+    if (!visible.length) {
+      this.list.innerHTML = `<div class="archive-empty solar-card">${archiveIcon('review')}<p>${t(records.length ? 'history.noMatches' : 'history.empty')}</p></div>`;
+      return;
+    }
+    for (const record of visible) this.list.appendChild(this.createCard(record));
+    if (focusedId && focusedAction) {
+      const card = [...this.list.querySelectorAll<HTMLElement>('.archive-card')]
+        .find((element) => element.dataset.gameId === focusedId);
+      card?.querySelector<HTMLButtonElement>(`[data-history-action="${focusedAction}"]`)?.focus({ preventScroll: true });
+    }
+  }
+
+  private createCard(record: GameRecord): HTMLElement {
+    const card = document.createElement('article');
+    card.className = 'archive-card solar-card';
+    card.dataset.gameId = record.id;
+    const accuracy = (['white', 'black'] as const).map((side) => {
+      const value = record[side === 'white' ? 'whiteAccuracy' : 'blackAccuracy'];
+      return value === undefined ? '' : `<span class="archive-accuracy">${t(`history.${side}`)}: ${value.toFixed(1)}%</span>`;
+    }).join('');
+    card.innerHTML = `<div class="archive-card-heading">
+      <span class="archive-result archive-result-${record.result}">${t(`history.${record.result}`)}</span>
+      <time datetime="${new Date(record.timestamp).toISOString()}">${escapeHistoryText(record.dateFormatted)}</time>
+    </div>
+    <h2>${escapeHistoryText(record.opponentTitle)}</h2>
+    <p class="archive-meta">${t(`history.${record.playerColor}`)} · ${escapeHistoryText(record.timeControl)} · ${t('history.moves')}: ${record.movesCount}</p>
+    <p class="archive-meta">${escapeHistoryText(t(`history.${record.reason}`))}</p>
+    <div class="archive-accuracies" aria-label="${t('history.accuracy')}">${accuracy}</div>
+    <div class="archive-actions">${(['review', 'pgn', 'delete'] as const).map((action) =>
+      `<button type="button" class="${action === 'review' ? 'solar-btn' : 'solar-btn-ghost'}" data-history-action="${action}">${archiveIcon(action)}<span>${action === 'pgn' ? 'PGN' : t(`history.${action}`)}</span></button>`).join('')}</div>`;
+    return card;
+  }
+
+  private handleClick = (event: MouseEvent): void => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('#history-back')) {
+      event.preventDefault();
+      this.options.onBack();
+      return;
+    }
+    const filter = target?.closest<HTMLButtonElement>('[data-history-filter]');
+    if (filter) {
+      this.filter = filter.dataset.historyFilter as typeof this.filter;
+      this.container.querySelectorAll('[data-history-filter]').forEach((button) =>
+        button.setAttribute('aria-pressed', String(button === filter)));
+      this.refresh();
+      return;
+    }
+    const button = target?.closest<HTMLButtonElement>('[data-history-action]');
+    const id = button?.closest<HTMLElement>('[data-game-id]')?.dataset.gameId;
+    const record = getGameHistory().find((item) => item.id === id);
+    if (!button || !record) return;
+    if (button.dataset.historyAction === 'review') this.options.onReview(record);
+    if (button.dataset.historyAction === 'pgn') void this.copyPGN(record.pgn);
+    if (button.dataset.historyAction === 'delete') {
+      deleteGameFromHistory(record.id);
+      this.refresh();
+    }
+  };
+
+  private async copyPGN(pgn: string): Promise<void> {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(pgn);
+      else {
+        const textarea = document.createElement('textarea');
+        textarea.value = pgn;
+        textarea.className = 'archive-clipboard';
+        this.container.appendChild(textarea);
+        try {
+          textarea.select();
+          if (!document.execCommand('copy')) throw new Error('Clipboard unavailable');
+        } finally {
+          textarea.remove();
+        }
+      }
+      this.notify(t('history.copied'));
+    } catch {
+      this.notify(t('history.copyError'));
+    }
+  }
+
+  public notify(message: string): void {
+    if (this.events.signal.aborted) return;
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toast.textContent = message;
+    this.toast.hidden = false;
+    this.toastTimer = setTimeout(() => { this.toast.hidden = true; }, 2500);
+  }
+
+  public destroy(): void {
+    this.events.abort();
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+  }
+}
 
 export class HistoryUI {
+  private unsubscribe: (() => void) | null = null;
+  private eventController = new AbortController();
+  private keyboardActive: () => boolean;
   private container: HTMLElement;
   private store: ChessStore;
   private listEl!: HTMLElement;
@@ -15,9 +170,10 @@ export class HistoryUI {
   private nextMistakeBtn!: HTMLButtonElement;
   private lastPlayedViewIndex: number | null = null;
 
-  constructor(container: HTMLElement, store: ChessStore) {
+  constructor(container: HTMLElement, store: ChessStore, keyboardActive = () => true) {
     this.container = container;
     this.store = store;
+    this.keyboardActive = keyboardActive;
 
     this.container.innerHTML = `
       <div class="history-panel">
@@ -51,7 +207,13 @@ export class HistoryUI {
     this.prevMistakeBtn = this.container.querySelector('#btn-prev-mistake') as HTMLButtonElement;
     this.nextMistakeBtn = this.container.querySelector('#btn-next-mistake') as HTMLButtonElement;
     this.initEvents();
-    this.store.subscribe(() => this.render());
+    this.unsubscribe = this.store.subscribe(() => this.render());
+  }
+
+  public destroy(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.eventController.abort();
   }
 
   private playReviewMoveSound(idx: number | null): void {
@@ -146,6 +308,7 @@ export class HistoryUI {
     });
 
     window.addEventListener('keydown', (e) => {
+      if (!this.keyboardActive()) return;
       if (['input', 'textarea'].includes((e.target as HTMLElement)?.tagName?.toLowerCase())) return;
       const historyLen = this.store.getLiveState().history.length;
       if (historyLen === 0 && !this.store.getActiveVariationNode()) return;
@@ -163,7 +326,7 @@ export class HistoryUI {
         e.preventDefault();
         handleLast();
       }
-    });
+    }, { signal: this.eventController.signal });
   }
 
   private isMistake(moveClass: string): boolean {

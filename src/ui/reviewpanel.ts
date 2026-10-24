@@ -46,6 +46,7 @@ export interface ReviewPanelOptions {
 }
 
 export class ReviewPanelUI {
+  private unsubscribe: (() => void) | null = null;
   private container: HTMLElement;
   private store: ChessStore;
 
@@ -195,7 +196,13 @@ export class ReviewPanelUI {
     }
 
     this.initEvents();
-    this.store.subscribe(() => this.render());
+    this.unsubscribe = this.store.subscribe(() => this.render());
+  }
+
+  public destroy(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    if (this.toastTimer) clearTimeout(this.toastTimer);
   }
 
   public initBoardNav(container: HTMLElement): void {

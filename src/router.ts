@@ -1,10 +1,11 @@
-export type AppRoute = 'home' | 'game' | 'analysis' | 'settings';
+export type AppRoute = 'home' | 'game' | 'analysis' | 'settings' | 'history';
 
 export function parseRouteHash(hash: string): AppRoute {
   const clean = hash.replace(/^#\/?/, '').trim().toLowerCase();
   if (clean === 'game') return 'game';
   if (clean === 'analysis') return 'analysis';
   if (clean === 'settings') return 'settings';
+  if (clean === 'history') return 'history';
   return 'home';
 }
 

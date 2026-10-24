@@ -1,5 +1,15 @@
 import type { AppRoute } from '@/router';
 import { mountSaturnBackground } from './saturn-background';
+import { t } from '@/i18n';
+
+export function buildHistoryButton(): string {
+  return `<button type="button" class="settings-toggle-btn history-toggle-btn" id="history-btn" aria-label="${t('history.title')}" title="${t('history.title')}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+      <path d="M4 4h7a3 3 0 0 1 3 3v14a4 4 0 0 0-4-2H4zM14 7a3 3 0 0 1 3-3h4v15h-3a4 4 0 0 0-4 2"/>
+      <path d="M7 8h3M7 12h3M17 8h1M17 12h1"/>
+    </svg>
+  </button>`;
+}
 
 export function buildSettingsButton(): string {
   return `<button type="button" class="settings-toggle-btn" id="settings-btn" aria-label="Настройки" title="Настройки">

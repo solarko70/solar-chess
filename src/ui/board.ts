@@ -80,6 +80,8 @@ export function isGeometricallyValidPremove(
 }
 
 export class ChessBoardUI {
+  private eventController = new AbortController()
+  private unsubscribe: (() => void) | null = null
   private container: HTMLElement
   private store: ChessStore
   private boardEl: HTMLElement
@@ -192,7 +194,7 @@ export class ChessBoardUI {
     this.container.querySelector('.board-container')?.setAttribute('data-instant-motion', String(this.instantMotion))
     motionQuery?.addEventListener('change', () => {
       if (motionQuery.matches) this.clearBoardEffects()
-    })
+    }, { signal: this.eventController.signal })
     this.promoOverlayEl = this.container.querySelector('.promo-overlay') as HTMLElement
     this.evalBarWrapperEl = this.container.querySelector('#eval-bar-wrapper') as HTMLElement
     this.evalBarFillEl = this.container.querySelector('#eval-bar-fill') as HTMLElement
@@ -206,7 +208,17 @@ export class ChessBoardUI {
     ;(this.boardEl as unknown as { __chessBoardUI?: ChessBoardUI }).__chessBoardUI = this
 
     this.initEvents()
-    this.store.subscribe(() => this.handleStoreNotification())
+    this.unsubscribe = this.store.subscribe(() => this.handleStoreNotification())
+  }
+
+  public destroy(): void {
+    this.unsubscribe?.()
+    this.unsubscribe = null
+    this.eventController.abort()
+    this.clearBoardEffects()
+    this.clearStellarDecorations()
+    this.floatingPieceEl?.remove()
+    ChessBoardUI.instances.delete(this)
   }
 
   private initEvents(): void {
@@ -217,10 +229,10 @@ export class ChessBoardUI {
       pointerDownOnBoard = true
       this.handlePointerDown(e)
     })
-    window.addEventListener('pointermove', (e) => this.handlePointerMove(e))
-    window.addEventListener('pointerup', (e) => this.handlePointerUp(e))
-    window.addEventListener('pointercancel', () => { this.planningFromSquare = null })
-    window.addEventListener('blur', () => { this.planningFromSquare = null })
+    window.addEventListener('pointermove', (e) => this.handlePointerMove(e), { signal: this.eventController.signal })
+    window.addEventListener('pointerup', (e) => this.handlePointerUp(e), { signal: this.eventController.signal })
+    window.addEventListener('pointercancel', () => { this.planningFromSquare = null }, { signal: this.eventController.signal })
+    window.addEventListener('blur', () => { this.planningFromSquare = null }, { signal: this.eventController.signal })
     this.boardEl.addEventListener('click', (e) => {
       if (e.button === 0) this.clearPlanning()
     })
@@ -241,7 +253,7 @@ export class ChessBoardUI {
           this.clearPremoves()
         }
       }
-    })
+    }, { signal: this.eventController.signal })
 
     // Right-click (contextmenu) cancels any active premove queue
     this.boardEl.addEventListener('contextmenu', (e) => {
@@ -251,9 +263,9 @@ export class ChessBoardUI {
 
     // Touch events for mobile touch devices
     this.boardEl.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false })
-    window.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false })
-    window.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false })
-    window.addEventListener('touchcancel', () => this.handleTouchCancel())
+    window.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false, signal: this.eventController.signal })
+    window.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false, signal: this.eventController.signal })
+    window.addEventListener('touchcancel', () => this.handleTouchCancel(), { signal: this.eventController.signal })
   }
 
   public getPremove(): Premove | null {

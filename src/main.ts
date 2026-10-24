@@ -10,8 +10,10 @@ import { APP_TITLE } from './config';
 import { t } from './i18n';
 import { HashRouter, type AppRoute } from './router';
 import { globalStore, type ChessStore } from './state/store';
+import { trackGameHistory } from './state/game-history';
 import { ChessBoardUI } from './ui/board';
-import { HistoryUI } from './ui/history';
+import { HistoryUI, HistoryArchiveUI } from './ui/history';
+import { ArchivedGameReviewUI } from './ui/history-review';
 import { ReviewPanelUI } from './ui/reviewpanel';
 import { GameOverModalUI } from './ui/gameovermodal';
 import { GameSetupModalUI } from './ui/setupmodals';
@@ -19,7 +21,7 @@ import { AnalysisBoardUI, mountAnalysisBoard } from './ui/analysis-board';
 import { LEVELS } from './ai';
 import { getPieceSvg } from './ui/pieces';
 import { buildGameScene, buildReviewScene } from './ui/space-scenes';
-import { buildSolarLogo, buildSettingsButton, disposeSaturnBackground, updateSaturnBackground } from './ui/navigation';
+import { buildSolarLogo, buildSettingsButton, buildHistoryButton, disposeSaturnBackground, updateSaturnBackground } from './ui/navigation';
 import { SettingsUI, applyColorTheme, getColorTheme, restoreColorTheme } from './ui/settings';
 import { ClockWidget } from './ui/clockwidget';
 import type { Color } from './core';
@@ -122,6 +124,9 @@ export function initApp(): void {
   const app = document.getElementById('app');
   if (!app) return;
 
+  currentRouter?.destroy();
+  currentRouter = null;
+
   disposeSaturnBackground();
   clockWidgetInstance?.destroy();
   clockWidgetInstance = null;
@@ -159,6 +164,7 @@ export function initApp(): void {
 
   app.innerHTML = `
     ${buildSettingsButton()}
+    ${buildHistoryButton()}
     <!-- Fixed Sound Mute Toggle in top-right corner of viewport (left of Theme Toggle) -->
     <button class="sound-toggle-btn" id="sound-btn" aria-label="Звук: включен" title="Звук: включен">
       ${SOUND_ON_ICON}
@@ -361,6 +367,7 @@ export function initApp(): void {
     <!-- Screen 3: Analysis Screen (Stage 6b) -->
     <div class="screen screen-analysis" id="screen-analysis" style="display: none;"></div>
     <div class="screen screen-settings" id="screen-settings" style="display: none;"></div>
+    <div class="screen screen-history" id="screen-history" style="display: none;"></div>
   `;
 
   // Fullscreen Solar Game background mounted directly into document.body
@@ -414,16 +421,21 @@ export function initApp(): void {
 
   let isReviewOverlayOpen = false;
   let settingsUI: SettingsUI | null = null;
+  let historyArchive: HistoryArchiveUI | null = null;
+  let archivedReview: ArchivedGameReviewUI | null = null;
+  let gameOverModal: GameOverModalUI;
+  const closeArchivedReview = (): void => {
+    archivedReview?.destroy();
+    archivedReview = null;
+    historyArchive?.refresh();
+  };
 
   // Setup router
-  if (currentRouter) {
-    currentRouter.destroy();
-    currentRouter = null;
-  }
-
   currentRouter = new HashRouter((route: AppRoute) => {
     syncBgAnimState();
-    if (route === 'settings' && isReviewOverlayOpen) closeReviewOverlay(false);
+    if (route !== 'game' && isReviewOverlayOpen) closeReviewOverlay(false);
+    if (route !== 'history' && archivedReview) closeArchivedReview();
+    if (route === 'history') gameOverModal?.hide(true);
     // Redirect to home if opening game screen without an active game
     if (route === 'game' && !globalStore.isGameActive()) {
       currentRouter?.navigate('home');
@@ -434,6 +446,7 @@ export function initApp(): void {
     const gameScreen = document.getElementById('screen-game');
     const analysisScreen = document.getElementById('screen-analysis');
     const settingsScreen = document.getElementById('screen-settings');
+    const historyScreen = document.getElementById('screen-history');
     const solarBg = document.getElementById('solar-bg');
 
     const isHome = route === 'home';
@@ -441,6 +454,7 @@ export function initApp(): void {
     document.body.classList.toggle('home-active', isHome);
     document.body.classList.toggle('game-active', isGame);
     document.body.classList.toggle('settings-active', route === 'settings');
+    document.body.classList.toggle('history-active', route === 'history');
     updateSaturnBackground(route, app);
 
     if (isHome) {
@@ -478,6 +492,12 @@ export function initApp(): void {
       settingsScreen.classList.toggle('active', isSettings);
       if (isSettings) settingsUI?.sync();
     }
+    if (historyScreen) {
+      const isHistory = route === 'history';
+      historyScreen.style.display = isHistory ? 'flex' : 'none';
+      historyScreen.classList.toggle('active', isHistory);
+      if (isHistory && !archivedReview) historyArchive?.refresh();
+    }
     if (analysisScreen) {
       const isAnalysis = route === 'analysis';
       analysisScreen.style.display = isAnalysis ? 'flex' : 'none';
@@ -498,6 +518,13 @@ export function initApp(): void {
 
   const originalRouterDestroy = currentRouter.destroy.bind(currentRouter);
   currentRouter.destroy = () => {
+    closeArchivedReview();
+    historyArchive?.destroy();
+    stopHistoryTracking();
+    boardUI.destroy();
+    movesUI.destroy();
+    reviewPanel.destroy();
+    gameOverModal?.destroy();
     clockWidgetInstance?.destroy();
     clockWidgetInstance = null;
     if (analysisBoardInstance) {
@@ -560,13 +587,15 @@ export function initApp(): void {
   // Mount Board, History, and Review Panel
   clockWidgetInstance = new ClockWidget(document.getElementById('clock-mount')!, globalStore, undefined, { autoTick: false });
   const boardMount = document.getElementById('board-mount') as HTMLElement;
-  new ChessBoardUI(boardMount, globalStore);
+  const boardUI = new ChessBoardUI(boardMount, globalStore);
 
   const historyMount = document.getElementById('history-mount') as HTMLElement;
-  new HistoryUI(historyMount, globalStore);
+  const movesUI = new HistoryUI(historyMount, globalStore, () =>
+    !archivedReview && (currentRouter?.getRoute() === 'game' || isReviewOverlayOpen));
 
   const reviewMount = document.getElementById('review-mount') as HTMLElement;
   const reviewPanel = new ReviewPanelUI(reviewMount, globalStore);
+  const stopHistoryTracking = trackGameHistory(globalStore);
 
   // Review Overlay open/close logic
   const reviewOverlay = document.getElementById('review-overlay') as HTMLElement;
@@ -697,7 +726,7 @@ export function initApp(): void {
   const modalMount = document.createElement('div');
   modalMount.id = 'game-over-modal-mount';
   document.body.appendChild(modalMount);
-  const gameOverModal = new GameOverModalUI(modalMount, globalStore, {
+  gameOverModal = new GameOverModalUI(modalMount, globalStore, {
     onStartReview: (options) => {
       openReviewOverlay(options);
     },
@@ -913,6 +942,10 @@ export function initApp(): void {
   });
 
   const handleGlobalKeydown = (e: KeyboardEvent): void => {
+    if (archivedReview) {
+      if (e.key === 'Escape') { e.preventDefault(); closeArchivedReview(); }
+      return;
+    }
     if (e.key === 'Escape') {
       if (resignOverlay && resignOverlay.style.display !== 'none') {
         closeResignModal();
@@ -1126,6 +1159,20 @@ export function initApp(): void {
   });
   document.getElementById('settings-btn')?.addEventListener('click', () => {
     currentRouter?.navigate('settings');
+  });
+  historyArchive = new HistoryArchiveUI(document.getElementById('screen-history')!, {
+    onBack: () => currentRouter?.navigate('home'),
+    onReview: (record) => {
+      if (archivedReview) return;
+      try {
+        archivedReview = new ArchivedGameReviewUI(reviewOverlay, record, closeArchivedReview);
+      } catch {
+        historyArchive?.notify(t('history.loadError'));
+      }
+    },
+  });
+  document.getElementById('history-btn')?.addEventListener('click', () => {
+    currentRouter?.navigate('history');
   });
 }
 

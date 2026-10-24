@@ -108,6 +108,7 @@ export const TIME_CONTROLS: Record<TimeControlMode, TimeControlConfig> = {
 export type StoreListener = (state: GameState, store: ChessStore) => void;
 
 export class ChessStore {
+  private gameId = crypto.randomUUID();
   private ruleSet: RuleSet;
   private state: GameState;
   private flipped: boolean = false;
@@ -688,6 +689,7 @@ export class ChessStore {
   }
 
   newGame(initialState?: GameState, options?: GameModeOptions): void {
+    this.gameId = crypto.randomUUID();
     this.cancelAISearch();
     if (options) {
       this.configureGame(options);
@@ -1048,6 +1050,7 @@ export class ChessStore {
   loadPGN(pgnText: string): boolean {
     try {
       const parsed = parsePGN(pgnText);
+      this.gameId = crypto.randomUUID();
       this.cancelAISearch();
       this.clearPremove();
 
@@ -1398,6 +1401,10 @@ export class ChessStore {
 
   isGameActive(): boolean {
     return this.hasActiveGame;
+  }
+
+  getGameId(): string {
+    return this.gameId;
   }
 
   setActiveGame(active: boolean): void {

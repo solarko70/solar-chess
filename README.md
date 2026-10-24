@@ -36,6 +36,8 @@ A browser-based almost fully vibecoded chess game with classic rules, variants, 
 - Modern, responsive design
 - Drag & drop or click-to-move
 - Move history and navigation
+- Local archive of the latest 100 completed games at `#/history`, with result filters and PGN copying
+- Full game review from the archive without changing the current game
 - Timers (bullet, blitz, rapid, etc.)
 - Hints and position evaluation WIP
 - Themes and customization WIP
@@ -69,6 +71,13 @@ npm test
 
 ## Project Structure
 See `docs/ARCHITECTURE.md` for detailed project structure.
+
+The archive persists `GameRecord` entries through `src/storage/history.ts` under the
+`solar_chess_game_history` localStorage key. `src/state/game-history.ts` tracks completed
+games and adds review accuracy when available. The archive screen in `src/ui/history.ts`
+opens `src/ui/history-review.ts`, which uses a separate `ChessStore` and restores the
+live review shell on close. History stays on the current browser and device; deleting
+browser storage also deletes the archive.
 
 ## Contributing
 See `docs/CONTRIBUTING.md` for contribution guidelines.
