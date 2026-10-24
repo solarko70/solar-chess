@@ -61,6 +61,10 @@ export function createNodeStockfishWorker(): UCIWorkerLike {
   };
 
   let stdoutBuf = '';
+  // Writes can fail asynchronously when disposal closes the engine's pipe.
+  child.stdin?.on('error', (err) => {
+    workerAdapter.onerror?.(err);
+  });
   child.stdout?.on('data', (chunk: Buffer) => {
     stdoutBuf += chunk.toString('utf-8');
     const lines = stdoutBuf.split(/\r?\n/);

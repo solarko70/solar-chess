@@ -1,5 +1,5 @@
 import { ChessStore, type Premove } from '../state/store'
-import { getPieceSvg } from './pieces'
+import { getPieceSvg, PIECE_SYMBOLS } from './pieces'
 import { getMoveClassMeta, winChance } from '@/analysis'
 import { solarAudio } from '@/audio/solar-audio'
 import { generatePseudoLegal, serializeFEN, type Move, type Piece, type PieceType, type Square } from '@/core'
@@ -692,7 +692,7 @@ export class ChessBoardUI {
         if (piece) {
           const pieceEl = document.createElement('div')
           pieceEl.className = 'piece-wrapper piece'
-          pieceEl.dataset.piece = { king: 'k', queen: 'q', rook: 'r', bishop: 'b', knight: 'n', pawn: 'p' }[piece.type]
+          pieceEl.dataset.piece = PIECE_SYMBOLS[piece.type]
           pieceEl.dataset.color = piece.color
           pieceEl.innerHTML = getPieceSvg(piece.type, piece.color)
           sqEl.appendChild(pieceEl)
@@ -863,7 +863,7 @@ export class ChessBoardUI {
     let piece = this.boardEl.querySelector<HTMLElement>(`[data-square="${sq}"] .piece-wrapper`)
     const victim = move.captured
     if (!victim) return
-    const symbol = { king: 'k', queen: 'q', rook: 'r', bishop: 'b', knight: 'n', pawn: 'p' }[victim.type]
+    const symbol = PIECE_SYMBOLS[victim.type]
     if (!piece || piece.dataset.piece !== symbol || piece.dataset.color !== victim.color) {
       // A forward jump can skip the victim's position; rebuild its visual from move metadata.
       piece = document.createElement('div')

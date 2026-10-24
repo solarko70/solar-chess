@@ -1,5 +1,5 @@
 import { solarAudio, type SolarAudio, type SoundThemeId } from '@/audio/solar-audio'
-import { getPieceSvg } from './pieces'
+import { getPieceSet, getPieceSvg, setPieceSet, type PieceSetId } from './pieces'
 
 export type ColorTheme = 'dark' | 'light'
 export const COLOR_THEME_STORAGE_KEY = 'solar_chess_color_theme'
@@ -91,13 +91,13 @@ export class SettingsUI {
           </div>
           <h3 id="settings-pieces-label">Набор фигур</h3>
           <div class="settings-card-grid" role="group" aria-labelledby="settings-pieces-label">
-            <button type="button" class="settings-choice" data-piece-set="classic" aria-pressed="true">
-              <span class="settings-piece-preview" aria-hidden="true">${getPieceSvg('knight', 'white')}</span>
-              <strong>Классический</strong><span>Активен</span>
+            <button type="button" class="settings-choice" data-piece-set="classic" aria-pressed="false">
+              <span class="settings-piece-preview" aria-hidden="true">${getPieceSvg('pawn', 'white', 'classic')}${getPieceSvg('knight', 'black', 'classic')}</span>
+              <strong>Классический</strong><span>Традиционные фигуры</span>
             </button>
-            <button type="button" class="settings-choice" data-piece-set="solar" disabled>
-              <span class="settings-piece-preview settings-piece-solar" aria-hidden="true">${getPieceSvg('queen', 'white')}</span>
-              <strong>Солярный</strong><span>Solar Set <span class="settings-soon">Скоро</span></span>
+            <button type="button" class="settings-choice" data-piece-set="solar" aria-pressed="false">
+              <span class="settings-piece-preview" aria-hidden="true">${getPieceSvg('pawn', 'white', 'solar')}${getPieceSvg('knight', 'black', 'solar')}</span>
+              <strong>Солярный (Solar Set)</strong><span>Планеты, плазма и звёздные короны</span>
             </button>
           </div>
         </section>
@@ -119,8 +119,10 @@ export class SettingsUI {
       const soundTheme = button.dataset.soundTheme as SoundThemeId | undefined
       const preview = button.dataset.previewTheme as SoundThemeId | undefined
       const colorTheme = button.dataset.colorTheme as ColorTheme | undefined
+      const pieceSet = button.dataset.pieceSet as PieceSetId | undefined
       if (soundTheme) this.audio.setSoundTheme(soundTheme)
       if (preview) this.audio.previewSoundTheme(preview)
+      if (pieceSet) setPieceSet(pieceSet)
       if (colorTheme) {
         applyColorTheme(colorTheme)
         options.onThemeChange?.()
@@ -149,6 +151,9 @@ export class SettingsUI {
     })
     this.container.querySelectorAll<HTMLElement>('[data-color-theme]').forEach((button) => {
       button.setAttribute('aria-pressed', String(button.dataset.colorTheme === getColorTheme()))
+    })
+    this.container.querySelectorAll<HTMLButtonElement>('button[data-piece-set]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.pieceSet === getPieceSet()))
     })
   }
 }

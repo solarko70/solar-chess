@@ -3,6 +3,7 @@ import { AnalysisBoardUI, mountAnalysisBoard } from '@/ui/analysis-board';
 import { serializeFEN, type Move } from '@/core';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { PIECE_SET_STORAGE_KEY, setPieceSet } from '@/ui/pieces';
 
 if (typeof globalThis.PointerEvent === 'undefined') {
   class MockPointerEvent extends MouseEvent {
@@ -127,6 +128,30 @@ describe('Stage 6b: Analysis Board & Board Editor', () => {
 
     const pgnInput = container.querySelector('#analysis-pgn-input') as HTMLTextAreaElement;
     expect(pgnInput.value).toContain('1. e4 e5');
+  });
+
+  it('applies the piece set to analysis, editor palettes and newly edited pieces', () => {
+    try {
+      const store = analysisUI.getStore();
+      const position = serializeFEN(store.getState());
+      analysisUI.openBoardEditor();
+      setPieceSet('solar');
+      expect(serializeFEN(store.getState())).toBe(position);
+      expect(container.querySelectorAll('#analysis-board-mount svg[data-piece-set="solar"]')).toHaveLength(32);
+      expect(container.querySelectorAll('.palette-piece svg[data-piece-set="solar"]')).toHaveLength(12);
+      expect(container.querySelectorAll('#editor-board-mount svg[data-piece-set="solar"]')).toHaveLength(32);
+      container.querySelector<HTMLButtonElement>('.palette-piece[data-type="knight"][data-color="white"]')!.click();
+      container.querySelector<HTMLElement>('#editor-board-mount [data-square="36"]')!.click();
+      expect(container.querySelector('#editor-board-mount [data-square="36"] svg[data-piece="n"]')?.getAttribute('data-piece-set')).toBe('solar');
+      analysisUI.closeBoardEditor();
+      store.makeMove(52, 36);
+      expect(container.querySelector('#analysis-board-mount [data-square="36"] svg')?.getAttribute('data-piece-set')).toBe('solar');
+      setPieceSet('classic');
+      expect(container.querySelector('#analysis-board-mount svg[data-piece-set="solar"]')).toBeNull();
+    } finally {
+      setPieceSet('classic');
+      localStorage.removeItem(PIECE_SET_STORAGE_KEY);
+    }
   });
 
   it('кнопки навигации по истории ходов корректно переключают позицию на доске анализа', () => {

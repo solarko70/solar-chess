@@ -432,6 +432,8 @@ export class StockfishEngine implements AnalysisEngine {
   private workerFactory: UCIWorkerFactory;
   private worker: UCIWorkerLike | null = null;
   private initPromise: Promise<UCIWorkerLike> | null = null;
+  private initializingWorker: UCIWorkerLike | null = null;
+  private cancelInitialization: (() => void) | null = null;
   private disposed = false;
   private queue: QueuedSearchTask[] = [];
   private processing = false;
@@ -465,11 +467,21 @@ export class StockfishEngine implements AnalysisEngine {
 
     this.initPromise = (async () => {
       const w = await this.workerFactory();
+      if (this.disposed) {
+        w.terminate();
+        throw createAbortError();
+      }
+      this.initializingWorker = w;
       await new Promise<void>((resolve, reject) => {
         const prevMessage = w.onmessage;
         const cleanup = () => {
           w.onmessage = prevMessage;
           w.onerror = null;
+          this.cancelInitialization = null;
+        };
+        this.cancelInitialization = () => {
+          cleanup();
+          reject(createAbortError());
         };
         w.onerror = (err) => {
           cleanup();
@@ -494,13 +506,17 @@ export class StockfishEngine implements AnalysisEngine {
         }
       });
 
+      if (this.disposed) throw createAbortError();
       if (this.chess960) {
         w.postMessage('setoption name UCI_Chess960 value true');
       }
 
       this.worker = w;
+      this.initializingWorker = null;
       return w;
     })().catch((err) => {
+      this.initializingWorker?.terminate();
+      this.initializingWorker = null;
       this.initPromise = null;
       throw err;
     });
@@ -822,6 +838,10 @@ export class StockfishEngine implements AnalysisEngine {
 
   dispose(): void {
     this.disposed = true;
+    // A screen can close before the worker factory or UCI handshake finishes.
+    this.cancelInitialization?.();
+    this.initializingWorker?.terminate();
+    this.initializingWorker = null;
     this.isSearching = false;
     this.resolveStop?.();
     while (this.queue.length > 0) {

@@ -1169,7 +1169,14 @@ body.review-active #app {
 .chess-piece-svg {
   width: 100%;
   height: 100%;
+}
+
+.chess-piece-svg:not([data-piece-set='solar']) {
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.25));
+}
+
+.chess-piece-svg[data-piece-set='solar'] {
+  filter: none;
 }
 
 /* Board Classification Badge Layer (Stage A3.1) */
@@ -6195,9 +6202,8 @@ body.settings-active #app { max-width: none; }
 .settings-swatch-classic { background: repeating-linear-gradient(25deg, #8c5c32, #8c5c32 3px, #a57749 4px, #c89b65 8px); }
 .settings-swatch-dark { background: radial-gradient(circle at 35% 30%, #6366f1, #1e1b4b 65%); border: 1px solid #6366f1; }
 .settings-swatch-light { background: radial-gradient(circle at 35% 30%, #fffbeb, #fbbf24 65%); }
-.settings-piece-preview { width: 48px; height: 48px; }
-.settings-piece-preview svg { width: 100%; height: 100%; }
-.settings-piece-solar { filter: sepia(1) saturate(2); }
+.settings-piece-preview { display: flex; gap: 8px; width: 104px; height: 48px; }
+.settings-piece-preview svg { width: 48px; height: 48px; flex-shrink: 0; }
 .settings-soon { display: inline-block; width: fit-content; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--bg-tertiary); color: var(--text-secondary); font-size: 0.7rem; }
 .settings-center button:focus-visible, .settings-back:focus-visible, .settings-toggle-btn:focus-visible { outline: 2px solid var(--solar-gold); outline-offset: 4px; }
 

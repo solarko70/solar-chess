@@ -1,6 +1,60 @@
 import type { PieceType, Color } from '@/core';
+import { getSolarPieceBody } from './solar';
 
-export function getPieceSvg(type: PieceType, color: Color): string {
+export type PieceSetId = 'classic' | 'solar';
+export const PIECE_SET_STORAGE_KEY = 'solar_chess_piece_set';
+export const PIECE_SYMBOLS: Record<PieceType, string> = {
+  king: 'k', queen: 'q', rook: 'r', bishop: 'b', knight: 'n', pawn: 'p',
+};
+
+let currentPieceSet: PieceSetId = 'classic';
+let lastStoredValue: string | null | undefined;
+
+export function getPieceSet(): PieceSetId {
+  try {
+    const stored = localStorage.getItem(PIECE_SET_STORAGE_KEY);
+    if (stored !== lastStoredValue) {
+      currentPieceSet = stored === 'solar' ? 'solar' : 'classic';
+      lastStoredValue = stored;
+    }
+  } catch {
+    // Retain the in-memory choice when storage is unavailable.
+  }
+  return currentPieceSet;
+}
+
+export function setPieceSet(pieceSet: PieceSetId): void {
+  getPieceSet();
+  currentPieceSet = pieceSet;
+  try {
+    localStorage.setItem(PIECE_SET_STORAGE_KEY, pieceSet);
+    lastStoredValue = pieceSet;
+  } catch {
+    // The selection still applies for this session if saving is blocked.
+  }
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll<SVGSVGElement>('.chess-piece-svg[data-piece-set-live]').forEach((svg) => {
+    const type = (Object.keys(PIECE_SYMBOLS) as PieceType[])
+      .find((type) => PIECE_SYMBOLS[type] === svg.dataset.piece);
+    const color = svg.dataset.color;
+    if (!type || color !== 'white' && color !== 'black') return;
+    // Preserve wrappers and SVG roots used by dragging, premoves and active effects.
+    svg.innerHTML = getPieceBody(type, color, pieceSet);
+    svg.dataset.pieceSet = pieceSet;
+  });
+}
+
+function getPieceBody(type: PieceType, color: Color, pieceSet: PieceSetId): string {
+  return pieceSet === 'solar' ? getSolarPieceBody(type, color) : getClassicPieceBody(type, color);
+}
+
+export function getPieceSvg(type: PieceType, color: Color, pieceSet?: PieceSetId): string {
+  const selected = pieceSet ?? getPieceSet();
+  const live = pieceSet === undefined ? ' data-piece-set-live="true"' : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="chess-piece-svg" draggable="false" aria-hidden="true" focusable="false" data-piece="${PIECE_SYMBOLS[type]}" data-color="${color}" data-piece-set="${selected}"${live}>${getPieceBody(type, color, selected)}</svg>`;
+}
+
+function getClassicPieceBody(type: PieceType, color: Color): string {
   const isWhite = color === 'white';
   const fill = isWhite ? '#f8fafc' : '#1e293b';
   const stroke = isWhite ? '#334155' : '#0f172a';
@@ -78,5 +132,5 @@ export function getPieceSvg(type: PieceType, color: Color): string {
       break;
   }
 
-  return `<svg viewBox="0 0 100 100" class="chess-piece-svg" draggable="false">${body}</svg>`;
+  return body;
 }

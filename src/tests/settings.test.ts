@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SolarAudio } from '@/audio/solar-audio'
 import { SOUND_THEME_STORAGE_KEY } from '@/audio/sound-theme'
 import { SettingsUI, COLOR_THEME_STORAGE_KEY, getColorTheme } from '@/ui/settings'
+import { getPieceSet, PIECE_SET_STORAGE_KEY, setPieceSet } from '@/ui/pieces'
 
 describe('Settings screen', () => {
   let container: HTMLElement
@@ -25,9 +26,10 @@ describe('Settings screen', () => {
 
   afterEach(() => {
     container.remove()
+    vi.restoreAllMocks()
+    setPieceSet('classic')
     localStorage.clear()
     document.documentElement.removeAttribute('data-theme')
-    vi.restoreAllMocks()
   })
 
   it('renders audio, appearance and language sections with the current choices', () => {
@@ -37,8 +39,8 @@ describe('Settings screen', () => {
     expect(button('[data-sound-theme="cosmic"]').getAttribute('aria-pressed')).toBe('true')
     expect(button('[data-color-theme="dark"]').getAttribute('aria-pressed')).toBe('true')
     expect(button('[data-piece-set="classic"]').getAttribute('aria-pressed')).toBe('true')
-    expect(button('[data-piece-set="solar"]').disabled).toBe(true)
-    expect(button('[data-piece-set="solar"]').textContent).toContain('Скоро')
+    expect(button('[data-piece-set="solar"]').disabled).toBe(false)
+    expect(button('[data-piece-set="solar"]').textContent).not.toContain('Скоро')
     expect([...container.querySelectorAll('button:disabled')].some((el) => el.textContent?.includes('English'))).toBe(true)
   })
 
@@ -53,6 +55,43 @@ describe('Settings screen', () => {
     expect(localStorage.getItem(SOUND_THEME_STORAGE_KEY)).toBe('cosmic')
     expect(classic.getAttribute('aria-pressed')).toBe('false')
     expect(classic.isConnected).toBe(true)
+  })
+
+  it('selects and persists both piece sets while keeping distinct previews', () => {
+    expect(getPieceSet()).toBe('classic')
+    const classic = button('button[data-piece-set="classic"]')
+    const solar = button('button[data-piece-set="solar"]')
+    solar.querySelector('svg path')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(getPieceSet()).toBe('solar')
+    expect(localStorage.getItem(PIECE_SET_STORAGE_KEY)).toBe('solar')
+    expect(PIECE_SET_STORAGE_KEY).toBe('solar_chess_piece_set')
+    expect(solar.getAttribute('aria-pressed')).toBe('true')
+    expect(classic.getAttribute('aria-pressed')).toBe('false')
+    expect(classic.querySelectorAll('svg[data-piece-set="classic"]')).toHaveLength(2)
+    expect(solar.querySelectorAll('svg[data-piece-set="solar"]')).toHaveLength(2)
+    classic.click()
+    expect(getPieceSet()).toBe('classic')
+    expect(localStorage.getItem(PIECE_SET_STORAGE_KEY)).toBe('classic')
+    expect(classic.getAttribute('aria-pressed')).toBe('true')
+    expect(solar.getAttribute('aria-pressed')).toBe('false')
+    expect(solar.isConnected).toBe(true)
+  })
+
+  it('restores the saved piece set when settings are reopened', () => {
+    localStorage.setItem(PIECE_SET_STORAGE_KEY, 'solar')
+    const second = document.createElement('div')
+    new SettingsUI(second, { audio, onBack })
+    expect(second.querySelector('button[data-piece-set="solar"]')?.getAttribute('aria-pressed')).toBe('true')
+    expect(second.querySelector('button[data-piece-set="classic"]')?.getAttribute('aria-pressed')).toBe('false')
+    expect(getPieceSet()).toBe('solar')
+  })
+
+  it('falls back to classic for an unknown saved piece set', () => {
+    localStorage.setItem(PIECE_SET_STORAGE_KEY, 'unknown')
+    const second = document.createElement('div')
+    new SettingsUI(second, { audio, onBack })
+    expect(getPieceSet()).toBe('classic')
+    expect(second.querySelector('button[data-piece-set="classic"]')?.getAttribute('aria-pressed')).toBe('true')
   })
 
   it('previews a theme without selecting it or changing the saved preference', () => {
@@ -116,10 +155,20 @@ describe('Settings screen', () => {
     expect(() => {
       button('[data-sound-theme="classic"]').click()
       button('[data-color-theme="light"]').click()
+      button('button[data-piece-set="solar"]').click()
       button('#settings-sound-toggle').click()
     }).not.toThrow()
     expect(audio.getSoundTheme()).toBe('classic')
     expect(audio.isMuted()).toBe(true)
     expect(getColorTheme()).toBe('light')
+    expect(getPieceSet()).toBe('solar')
+    expect(button('button[data-piece-set="solar"]').getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('keeps the piece choice usable when localStorage cannot be read', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Blocked') })
+    expect(() => button('button[data-piece-set="solar"]').click()).not.toThrow()
+    expect(getPieceSet()).toBe('solar')
+    expect(button('button[data-piece-set="solar"]').getAttribute('aria-pressed')).toBe('true')
   })
 })

@@ -5,6 +5,8 @@ import { generateLegal } from '@/core'
 import type { GameReviewResult } from '@/analysis'
 import { solarAudio } from '@/audio/solar-audio'
 import { HistoryUI } from '@/ui/history'
+import { getPieceSvg, PIECE_SET_STORAGE_KEY, PIECE_SYMBOLS, setPieceSet } from '@/ui/pieces'
+import type { Color, PieceType } from '@/core'
 
 describe('Right-click board planning', () => {
   let store: ChessStore
@@ -122,6 +124,157 @@ describe('Right-click board planning', () => {
       .not.toBe(second.querySelector('.board-planning-overlay marker')?.id)
     expect(second.querySelector('.best-move-arrow-line')).not.toBeNull()
     second.remove()
+  })
+})
+
+describe('Piece set rendering', () => {
+  let store: ChessStore
+  let container: HTMLElement
+  let board: ChessBoardUI
+  const square = (sq: number) => container.querySelector<HTMLElement>(`.chess-square[data-square="${sq}"]`)!
+  const pointer = (target: EventTarget, type: string, clientX = 0, clientY = 0) =>
+    target.dispatchEvent(new MouseEvent(type, { button: 0, bubbles: true, clientX, clientY }))
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+    setPieceSet('classic')
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    store = new ChessStore()
+    store.setGameMode('pvp', false)
+    board = new ChessBoardUI(container, store)
+    store.selectSquare(null)
+  })
+
+  afterEach(() => {
+    container.remove()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    setPieceSet('classic')
+    localStorage.clear()
+  })
+
+  const types = Object.keys(PIECE_SYMBOLS) as PieceType[]
+  const pieces = types.flatMap((type) => (['white', 'black'] as Color[]).map((color) => ({ type, color })))
+  it.each(pieces)('renders a lightweight solar SVG for $color $type', ({ type, color }) => {
+    const svg = getPieceSvg(type, color, 'solar')
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    expect(doc.querySelector('parsererror')).toBeNull()
+    expect(doc.documentElement.getAttribute('viewBox')).toBe('0 0 100 100')
+    expect(doc.documentElement.getAttribute('data-piece')).toBe(PIECE_SYMBOLS[type])
+    expect(doc.documentElement.getAttribute('data-color')).toBe(color)
+    expect(doc.querySelector('g')?.getAttribute('fill')).toBe(color === 'white' ? '#f8fafc' : '#1e293b')
+    expect(doc.querySelector('g')?.getAttribute('stroke')).toBe(color === 'white' ? '#334155' : '#0f172a')
+    expect(doc.querySelector('g')?.getAttribute('stroke-width')).toBe('2.8')
+    if (color === 'black') {
+      expect(svg).not.toMatch(/#(?:fff(?:fff)?|e2e8f0|f8fafc|cbd5e1)\b/i)
+      expect(doc.querySelector('g')?.getAttribute('style')).toContain('--solar-piece-accent:#64748b')
+    }
+    const counterpart = new DOMParser().parseFromString(
+      getPieceSvg(type, color === 'white' ? 'black' : 'white', 'solar'), 'image/svg+xml',
+    )
+    expect(doc.querySelector('g')?.innerHTML).toBe(counterpart.querySelector('g')?.innerHTML)
+    const motifs = {
+      pawn: '.solar-saturn-ring', rook: '.solar-observatory-slit', knight: '.solar-plasma-mane',
+      bishop: '.solar-crescent', queen: '.solar-tiara-stars', king: '.solar-supernova-crown',
+    }
+    expect(doc.querySelector(motifs[type])).not.toBeNull()
+    expect(doc.querySelector('image, filter, animate, animateTransform, script, foreignObject')).toBeNull()
+    expect(svg.length).toBeLessThan(4000)
+  })
+
+  it('restores solar pieces on newly mounted boards', () => {
+    expect(container.querySelectorAll('.chess-piece-svg[data-piece-set="classic"]')).toHaveLength(32)
+    localStorage.setItem(PIECE_SET_STORAGE_KEY, 'solar')
+    const mount = document.createElement('div')
+    container.appendChild(mount)
+    const secondStore = new ChessStore()
+    new ChessBoardUI(mount, secondStore)
+    secondStore.selectSquare(null)
+    expect(mount.querySelectorAll('.chess-piece-svg[data-piece-set="solar"]')).toHaveLength(32)
+  })
+
+  it('keeps solar piece attributes and nested SVG move handlers compatible', () => {
+    setPieceSet('solar')
+    expect(container.querySelectorAll('.piece-wrapper > svg[data-piece-set="solar"]')).toHaveLength(32)
+    const pawn = square(52).querySelector<HTMLElement>('.piece-wrapper')!
+    expect(pawn.dataset.piece).toBe('p')
+    expect(pawn.dataset.color).toBe('white')
+    pointer(pawn.querySelector('circle')!, 'pointerdown')
+    pointer(window, 'pointerup')
+    expect(store.getSelectedSquare()).toBe(52)
+    pointer(square(36), 'pointerdown')
+    pointer(window, 'pointerup')
+    expect(store.getLastMove()).toMatchObject({ from: 52, to: 36 })
+    expect(square(36).querySelector('.piece-wrapper[data-piece="p"][data-color="white"] > svg')?.getAttribute('data-piece-set')).toBe('solar')
+  })
+
+  it('switches pieces during pointer dragging without replacing the moving nodes', () => {
+    vi.spyOn(container.querySelector('.chess-board')!, 'getBoundingClientRect')
+      .mockReturnValue(new DOMRect(0, 0, 640, 640))
+    const pawn = square(52).querySelector('.piece-wrapper')!
+    pointer(pawn.querySelector('circle')!, 'pointerdown', 360, 520)
+    pointer(window, 'pointermove', 360, 360)
+    const floating = document.querySelector('.floating-drag-piece')!
+    const svg = floating.querySelector('svg')!
+    setPieceSet('solar')
+    expect(square(52).querySelector('.piece-wrapper')).toBe(pawn)
+    expect(floating.querySelector('svg')).toBe(svg)
+    expect(svg.getAttribute('data-piece-set')).toBe('solar')
+    pointer(window, 'pointerup', 360, 360)
+    expect(store.getLastMove()).toMatchObject({ from: 52, to: 36 })
+    expect(document.querySelector('.floating-drag-piece')).toBeNull()
+  })
+
+  it('preserves a queued premove and executes it after changing the piece set', () => {
+    store.makeMove(52, 36)
+    board.setPremove({ from: 62, to: 45 })
+    const piece = square(45).querySelector('.piece-wrapper')!
+    const position = store.getLiveState()
+    setPieceSet('solar')
+    expect(store.getLiveState()).toBe(position)
+    expect(store.getPremoves()).toEqual([{ from: 62, to: 45 }])
+    expect(square(45).querySelector('.piece-wrapper')).toBe(piece)
+    expect(piece.querySelector('svg')?.getAttribute('data-piece-set')).toBe('solar')
+    store.makeMove(12, 28)
+    expect(store.getLiveState().history).toHaveLength(3)
+    expect(store.getLastMove()).toMatchObject({ from: 62, to: 45 })
+  })
+
+  it('preserves capture, flight and landing effects when switching sets mid-move', () => {
+    vi.spyOn(board as unknown as { animationsEnabled(): boolean }, 'animationsEnabled').mockReturnValue(true)
+    store.loadFEN('4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1')
+    store.makeMove(36, 27)
+    const ghost = container.querySelector('.captured-piece-ghost')!
+    const sliding = square(27).querySelector('.piece-sliding')!
+    const trail = container.querySelector('.solar-warp-trail')!
+    expect(ghost).not.toBeNull()
+    expect(sliding).not.toBeNull()
+    setPieceSet('solar')
+    expect(container.querySelector('.captured-piece-ghost')).toBe(ghost)
+    expect(square(27).querySelector('.piece-sliding')).toBe(sliding)
+    expect(container.querySelector('.solar-warp-trail')).toBe(trail)
+    expect(ghost.querySelector('svg')?.getAttribute('data-piece-set')).toBe('solar')
+    vi.advanceTimersByTime(200)
+    expect(square(27).classList.contains('solar-piece-land')).toBe(true)
+    setPieceSet('classic')
+    expect(square(27).classList.contains('solar-piece-land')).toBe(true)
+    vi.advanceTimersByTime(500)
+    expect(container.querySelector('.solar-capture-slot')).toBeNull()
+  })
+
+  it('updates an open promotion dialog and confirms a solar queen', () => {
+    store.loadFEN('7k/P7/8/8/8/8/8/4K3 w - - 0 1')
+    store.makeMove(8, 0)
+    const choices = container.querySelectorAll('.promo-btn')
+    expect(choices).toHaveLength(4)
+    setPieceSet('solar')
+    expect(container.querySelectorAll('.promo-btn svg[data-piece-set="solar"]')).toHaveLength(4)
+    ;(choices[0] as HTMLButtonElement).click()
+    expect(store.getState().board.pieces[0]).toMatchObject({ type: 'queen', color: 'white' })
+    expect(square(0).querySelector('svg[data-piece="q"]')?.getAttribute('data-piece-set')).toBe('solar')
   })
 })
 
@@ -622,6 +775,23 @@ describe('Solar board juice', () => {
     store.setViewIndex(1)
     vi.advanceTimersByTime(400)
   }
+
+  it('keeps the selected set through review navigation and board flipping', () => {
+    try {
+      prepareReview()
+      const position = store.getState()
+      setPieceSet('solar')
+      expect(store.getState()).toEqual(position)
+      expect(container.querySelectorAll('.chess-board svg[data-piece-set="solar"]')).toHaveLength(32)
+      store.setViewIndex(2)
+      store.toggleFlip()
+      expect(square(27).querySelector('svg[data-piece="p"]')?.getAttribute('data-piece-set')).toBe('solar')
+      expect(container.querySelector('.chess-board svg[data-piece-set="classic"]')).toBeNull()
+    } finally {
+      setPieceSet('classic')
+      localStorage.removeItem(PIECE_SET_STORAGE_KEY)
+    }
+  })
 
   it('prioritizes the finale over stellar audio when reviewing a mating move', () => {
     prepareReview()
