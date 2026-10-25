@@ -1,4 +1,4 @@
-import type { GameState, Piece, Color, CastlingRights, Square } from '../types';
+import type { GameState, Piece, Color, CastlingRights, Square, VariantId } from '../types';
 import { emptyBoard, toSquare, toCoords } from '../board';
 
 const CHAR_TO_PIECE: Record<string, Piece> = {
@@ -31,7 +31,7 @@ const PIECE_TO_CHAR: Record<string, string> = {
   'black-king': 'k',
 };
 
-export function parseFEN(fen: string, width = 8, height = 8): GameState {
+export function parseFEN(fen: string, width = 8, height = 8, variant: VariantId = 'standard'): GameState {
   const parts = fen.trim().split(/\s+/);
   const boardPart = parts[0];
   const turnPart = parts[1] ?? 'w';
@@ -93,6 +93,8 @@ export function parseFEN(fen: string, width = 8, height = 8): GameState {
     history: [],
     positionHistory: [],
     positionCounts: new Map(),
+    variant,
+    checksCount: { white: 0, black: 0 },
   };
 
   state.positionHistory = [positionKey(state)];

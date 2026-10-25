@@ -7,7 +7,10 @@ import type {
   RuleSet,
   PieceType,
   Color,
+  VariantId,
+  ChecksCount,
 } from '@/core';
+export type { VariantId, ChecksCount } from '@/core';
 import {
   classicalRuleSet,
   parseFEN,
@@ -76,6 +79,7 @@ export interface GameModeOptions {
   mode?: GameMode;
   level?: LevelId;
   playerColor?: PlayerColorChoice;
+  variant?: VariantId;
 }
 
 export interface AIWorkerLike {
@@ -137,6 +141,7 @@ export class ChessStore {
   private hasActiveGame: boolean = false;
 
   // AI state inside store
+  private variant: VariantId = 'standard';
   private gameMode: GameMode = 'pvp';
   private aiLevel: LevelId = 'club';
   private playerColorChoice: PlayerColorChoice = 'white';
@@ -186,9 +191,9 @@ export class ChessStore {
 
   getStateAtPly(ply: number): GameState {
     if (ply < 0) {
-      return this.ruleSet.getInitialState();
+      return { ...this.ruleSet.getInitialState(), variant: this.variant };
     }
-    let tempState = this.ruleSet.getInitialState();
+    let tempState: GameState = { ...this.ruleSet.getInitialState(), variant: this.variant };
     for (let i = 0; i <= ply && i < this.state.history.length; i++) {
       tempState = this.ruleSet.applyMove(tempState, this.state.history[i]);
     }
@@ -258,6 +263,18 @@ export class ChessStore {
     return this.gameMode;
   }
 
+  getVariant(): VariantId {
+    return this.variant;
+  }
+
+  setVariant(variant: VariantId): void {
+    this.variant = variant;
+  }
+
+  getChecksCount(): ChecksCount {
+    return this.getState().checksCount ?? { white: 0, black: 0 };
+  }
+
   getAILevel(): LevelId {
     return this.aiLevel;
   }
@@ -312,6 +329,9 @@ export class ChessStore {
   }
 
   configureGame(options: GameModeOptions, persist = true): void {
+    if (options.variant !== undefined) {
+      this.variant = options.variant;
+    }
     if (options.mode !== undefined) {
       this.gameMode = options.mode;
     }
@@ -704,7 +724,15 @@ export class ChessStore {
       this.flipped = this.playerColor === 'black';
     }
 
-    this.state = initialState ?? this.ruleSet.getInitialState();
+    if (initialState?.variant) {
+      this.variant = initialState.variant;
+    }
+    const baseState = initialState ?? this.ruleSet.getInitialState();
+    this.state = {
+      ...baseState,
+      variant: baseState.variant ?? this.variant,
+      checksCount: baseState.checksCount ?? { white: 0, black: 0 },
+    };
     this.isGameLoadedFromNotation = initialState !== undefined;
     this.gameOverModalDismissed = false;
     this.gameStartTime = null;
@@ -1022,7 +1050,7 @@ export class ChessStore {
 
   loadFEN(fen: string): boolean {
     try {
-      const parsed = parseFEN(fen);
+      const parsed = parseFEN(fen, 8, 8, this.variant);
       let whiteKings = 0;
       let blackKings = 0;
       for (const p of parsed.board.pieces) {
@@ -1063,7 +1091,10 @@ export class ChessStore {
         this.flipped = this.playerColor === 'black';
       }
 
-      this.state = parsed.state;
+      this.state = {
+        ...parsed.state,
+        variant: this.variant,
+      };
       this.isGameLoadedFromNotation = true;
       this.gameOverModalDismissed = true;
       this.gameStartTime = null;

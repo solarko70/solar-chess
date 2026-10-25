@@ -7938,3 +7938,302 @@ body:has(#screen-analysis.active) #app {
     transition: none !important;
   }
 }
+
+/* ── Stage 13a: Variants Hub & Variant Setup Modal ───────────────────────── */
+.screen-variants {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  min-height: 100vh;
+  padding: 28px 24px 48px;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+}
+
+.variants-page {
+  width: 100%;
+  max-width: 1120px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.variants-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.variants-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.variants-back-btn:hover {
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+.variants-title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #fbbf24;
+}
+
+.variants-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 12px;
+  background: #0b1120;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  align-self: flex-start;
+}
+
+.variants-tab-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 0.94rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.variants-tab-btn:hover {
+  color: #f8fafc;
+}
+
+.variants-tab-btn.active {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0b1120;
+  border-color: rgba(251, 191, 36, 0.7);
+}
+
+.variants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 16px;
+}
+
+.variant-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 14px;
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.variant-card-playable {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.variant-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.variant-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
+.variant-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.variant-card-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.variant-card-title {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.variant-card-subtitle {
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.variant-card-desc {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.48;
+  color: #cbd5e1;
+  flex: 1;
+}
+
+.variant-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.variant-play-btn {
+  padding: 8px 20px;
+  border-radius: 9px;
+  border: 1px solid rgba(251, 191, 36, 0.7);
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0b1120;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.variant-play-btn:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+.variant-wip-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.solar-promo-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 26px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.solar-promo-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
+.solar-promo-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.solar-promo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.solar-promo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.solar-promo-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.solar-promo-desc {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #e2e8f0;
+}
+
+.solar-promo-features {
+  margin: 0;
+  padding-left: 20px;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.variant-segmented-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.variant-seg-btn {
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.variant-seg-btn.active {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+}
+
+.variant-seg-btn:disabled,
+.variant-seg-btn.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.player-checks-badge,
+.clock-checks-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.6);
+  color: #fbbf24;
+  font-size: 0.78rem;
+  font-weight: 700;
+}

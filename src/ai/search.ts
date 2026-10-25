@@ -20,7 +20,7 @@ import {
   moveFlag,
   FLAG_EP,
 } from './position';
-import { evaluatePosition, PIECE_VALUE } from './evaluate';
+import { evaluatePosition, PIECE_VALUE, kingHillManhattanDistance } from './evaluate';
 
 export const MATE = 100000;
 export const MATE_BOUND = MATE - 1000;
@@ -246,6 +246,13 @@ export class Searcher {
       } else {
         scores[i] = this.history[side * n * n + from * n + to];
       }
+      if (this.pos.variant === 'king-of-the-hill' && Math.abs(b[from]) === KING && this.pos.width === 8) {
+        const { fileOf, rankOf } = this.pos.geo;
+        const dFrom = kingHillManhattanDistance(fileOf[from], rankOf[from]);
+        const dTo = kingHillManhattanDistance(fileOf[to], rankOf[to]);
+        if (dTo === 0) scores[i] += SCORE_PROMO + 500000;
+        else if (dTo < dFrom) scores[i] += 500000 + (6 - dTo) * 10000;
+      }
     }
   }
 
@@ -321,7 +328,9 @@ export class Searcher {
       }
       legal++;
       let score: number;
-      if (legal === 1) {
+      if (pos.isVariantWinForMover()) {
+        score = MATE - (ply + 1);
+      } else if (legal === 1) {
         score = -this.negamax(depth - 1, -beta, -alpha, ply + 1);
       } else {
         // Principal variation search: null window first, re-search on fail-high

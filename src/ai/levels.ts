@@ -201,15 +201,17 @@ export function findBestMove(state: GameState, level: LevelId | LevelConfig, opt
   // Levels with maxNodes rely on node & depth limits, not wall-clock CPU speed
   const timeMs = options.timeMs ?? (cfg.maxNodes !== undefined ? undefined : cfg.timeMs);
 
+  const isVariant = state.variant === 'king-of-the-hill' || state.variant === 'three-check';
   const res = analyzePosition(state, {
-    depth: cfg.depth,
-    nodes: cfg.maxNodes,
+    depth: isVariant ? Math.max(2, cfg.depth) : cfg.depth,
+    nodes: isVariant && cfg.maxNodes !== undefined ? Math.max(400, cfg.maxNodes) : cfg.maxNodes,
     timeMs,
     multiPV,
     quiescence: cfg.quiescence,
   });
 
   if (!res.bestMove) return null;
+  if (isVariant && !options.rng) return res.bestMove;
   if (cfg.temperature <= 0 && cfg.blunderChance <= 0 && (!cfg.suboptimalChance || cfg.suboptimalChance <= 0)) return res.bestMove;
 
   const whiteToMove = state.turn === 'white';

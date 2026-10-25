@@ -7,5 +7,5 @@ export * from './notation/pgn';
 export * from './moves/generators';
 export * from './moves/apply';
 export * from './moves/legal';
-export { ClassicalRuleSet, classicalRuleSet, isThreefoldRepetition, isFiftyMoveRule, isInsufficientMaterial } from './rules/classical';
+export { ClassicalRuleSet, classicalRuleSet, isThreefoldRepetition, isFiftyMoveRule, isInsufficientMaterial, KOTH_CENTER_SQUARES, isKingOnHill } from './rules/classical';
 

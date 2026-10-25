@@ -1,4 +1,4 @@
-export { evaluate } from './evaluate';
+export { evaluate, kingHillManhattanDistance } from './evaluate';
 export { analyzePosition, toWhiteScore, DEFAULT_ANALYSIS_DEPTH } from './api';
 export type { Score, AnalysisOptions, AnalysisLine, AnalysisResult } from './api';
 export {

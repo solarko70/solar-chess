@@ -18,6 +18,7 @@ export class ClockWidget {
       <div class="clock-panel" id="clock-panel">
         <div class="clock-box white-clock" id="white-clock-box">
           <span class="clock-label">Белые</span>
+          <span class="clock-checks-badge" id="white-checks-badge" style="display: none;">+0</span>
           <span class="clock-time" id="white-time">--:--</span>
         </div>
         <div class="clock-controls">
@@ -32,6 +33,7 @@ export class ClockWidget {
         </div>
         <div class="clock-box black-clock" id="black-clock-box">
           <span class="clock-label">Чёрные</span>
+          <span class="clock-checks-badge" id="black-checks-badge" style="display: none;">+0</span>
           <span class="clock-time" id="black-time">--:--</span>
         </div>
       </div>
@@ -72,6 +74,19 @@ export class ClockWidget {
 
   public render(): void {
     const mode = this.store.getClockMode();
+    this.selectEl.value = mode;
+    const isThreeCheck = this.store.getVariant() === 'three-check';
+    const checks = this.store.getChecksCount();
+    const wChecksEl = this.container.querySelector<HTMLElement>('#white-checks-badge');
+    const bChecksEl = this.container.querySelector<HTMLElement>('#black-checks-badge');
+    if (wChecksEl) {
+      wChecksEl.style.display = isThreeCheck ? 'inline-flex' : 'none';
+      wChecksEl.textContent = `+${checks.white}`;
+    }
+    if (bChecksEl) {
+      bChecksEl.style.display = isThreeCheck ? 'inline-flex' : 'none';
+      bChecksEl.textContent = `+${checks.black}`;
+    }
     this.selectEl.value = mode;
     const hide = mode === 'none';
 

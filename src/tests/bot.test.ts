@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { LEVELS, LEVEL_ORDER, findBestMove, calculateBotThinkDelay, isTestEnvironment } from '@/ai';
+import { LEVELS, LEVEL_ORDER, findBestMove, calculateBotThinkDelay, isTestEnvironment, evaluate } from '@/ai';
 import * as api from '@/ai/api';
 import { MAX_DEPTH } from '@/ai/search';
 import { parseFEN, generateLegal } from '@/core';
@@ -253,5 +253,42 @@ describe('Eight bot difficulties', () => {
     expect(store.getLiveState().history).toHaveLength(2);
     expect(store.isAIThinking()).toBe(false);
     store.cancelAISearch();
+  });
+
+  it('marches king to the center and takes immediate center win in King of the Hill', () => {
+    // 1. Evaluation rewards closer Manhattan distance to the center and gives +100000 on center
+    const farState = parseFEN('7k/8/8/8/8/8/4K3/8 w - - 0 1', 8, 8, 'king-of-the-hill');
+    const nearState = parseFEN('7k/8/8/8/8/4K3/8/8 w - - 0 1', 8, 8, 'king-of-the-hill');
+    nearState.board.pieces[52] = null;
+    nearState.board.pieces[44] = { type: 'king', color: 'white' };
+    expect(evaluate(nearState)).toBeGreaterThan(evaluate(farState));
+
+    const centerWinState = parseFEN('7k/8/8/8/4K3/8/8/8 w - - 0 1', 8, 8, 'king-of-the-hill');
+    expect(evaluate(centerWinState)).toBe(100000);
+
+    // 2. Bot on e3 (44) immediately steps onto center square d4 (35) or e4 (36) to win
+    const oneStepFromHill = parseFEN('r6k/8/8/8/8/4K3/8/8 w - - 0 1', 8, 8, 'king-of-the-hill');
+    const move = findBestMove(oneStepFromHill, 'amateur');
+    expect(move).not.toBeNull();
+    expect([27, 28, 35, 36]).toContain(move!.to);
+  });
+
+  it('prioritizes checks and delivers the 3rd winning check in Three-Check', () => {
+    // 1. Evaluation gives a high bonus for checksCount and +100000 at 3 checks
+    const zeroChecks = parseFEN('4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1', 8, 8, 'three-check');
+    const twoChecks = { ...zeroChecks, checksCount: { white: 2, black: 0 } };
+    const threeChecks = { ...zeroChecks, checksCount: { white: 3, black: 0 } };
+    expect(evaluate(twoChecks)).toBeGreaterThan(evaluate(zeroChecks) + 500);
+    expect(evaluate(threeChecks)).toBe(100000);
+
+    // 2. With 2 checks already delivered, bot immediately chooses a checking move to win
+    const readyForThirdCheck = {
+      ...parseFEN('4k3/8/8/8/8/8/1Q6/4K3 w - - 0 1', 8, 8, 'three-check'),
+      checksCount: { white: 2, black: 0 },
+    };
+    const move = findBestMove(readyForThirdCheck, 'amateur');
+    expect(move).not.toBeNull();
+    // Queen from b2 (49) can check on b8 (1) or h8 (7) or e2 (52)
+    expect([1, 7, 52]).toContain(move!.to);
   });
 });

@@ -7,6 +7,22 @@ import { toCoords } from '../board';
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
+/** Center hill squares for King of the Hill on an 8x8 board: d5 (27), e5 (28), d4 (35), e4 (36). */
+export const KOTH_CENTER_SQUARES = [27, 28, 35, 36] as const;
+
+/**
+ * Checks whether a king occupies one of the four central squares (e4, d4, e5, d5).
+ */
+export function isKingOnHill(state: GameState, color?: Color): Color | null {
+  for (const sq of KOTH_CENTER_SQUARES) {
+    const piece = state.board.pieces[sq];
+    if (piece && piece.type === 'king' && (!color || piece.color === color)) {
+      return piece.color;
+    }
+  }
+  return null;
+}
+
 /**
  * Checks for threefold repetition.
  * Returns true if the current position key has been counted at least three times.
@@ -50,6 +66,8 @@ export function isInsufficientMaterial(state: GameState): boolean {
 
   // Must have both kings
   if (whiteKingSq === null || blackKingSq === null) return false;
+  if (state.variant === 'king-of-the-hill') return false;
+  if (state.variant === 'three-check') return nonKings.length === 0;
 
   // If there are queens, rooks, or pawns, material is sufficient
   for (const item of nonKings) {
@@ -119,6 +137,38 @@ export class ClassicalRuleSet implements RuleSet {
   }
 
   getGameResult(state: GameState): GameResult {
+    if (state.variant === 'king-of-the-hill') {
+      const lastMover: Color = state.turn === 'white' ? 'black' : 'white';
+      const hillWinner = isKingOnHill(state, lastMover) ?? isKingOnHill(state, state.turn);
+      if (hillWinner) {
+        return {
+          type: 'kingOfTheHill',
+          status: 'win',
+          winner: hillWinner,
+          reason: 'king-of-the-hill-center',
+        };
+      }
+    }
+
+    if (state.variant === 'three-check') {
+      const checks = state.checksCount ?? { white: 0, black: 0 };
+      if (checks.white >= 3) {
+        return {
+          type: 'threeCheck',
+          status: 'win',
+          winner: 'white',
+          reason: 'three-check-limit',
+        };
+      }
+      if (checks.black >= 3) {
+        return {
+          type: 'threeCheck',
+          status: 'win',
+          winner: 'black',
+          reason: 'three-check-limit',
+        };
+      }
+    }
     // 1. Checkmate
     if (isCheckmate(state)) {
       const winner: Color = state.turn === 'white' ? 'black' : 'white';

@@ -56,6 +56,10 @@ export const translations: Record<string, string> = {
   'history.stalemate': 'Пат',
   'history.fiftyMoveRule': 'Правило 50 ходов',
   'history.insufficientMaterial': 'Недостаточно материала',
+  'history.kingOfTheHill': 'Царь горы',
+  'history.threeCheck': 'Три шаха',
+  'history.king-of-the-hill-center': 'Царь горы',
+  'history.three-check-limit': 'Три шаха',
 };
 
 export function t(key: string): string {

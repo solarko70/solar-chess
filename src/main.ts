@@ -32,6 +32,7 @@ import {
 } from './ui/navigation';
 import { SettingsUI, applyColorTheme, getColorTheme, restoreColorTheme } from './ui/settings';
 import { ClockWidget } from './ui/clockwidget';
+import { VariantsUI } from './ui/variants';
 import type { Color } from './core';
 
 function formatClockMs(ms: number): { text: string; isLow: boolean } {
@@ -163,6 +164,7 @@ export function initApp(): void {
 
   // Remove old modals & background mounted on document.body on re-init
   document.getElementById('setup-modal-mount')?.remove();
+  document.getElementById('variant-setup-modal')?.remove();
   document.getElementById('game-over-modal-mount')?.remove();
   document.getElementById('game-solar-bg')?.remove();
 
@@ -290,6 +292,7 @@ export function initApp(): void {
             <div class="player-info">
               <span class="player-color-indicator black" id="player-indicator-top"></span>
               <span class="player-name" id="player-name-top">Чёрные</span>
+              <span class="player-checks-badge" id="player-checks-top" style="display: none;">+0</span>
             </div>
             <div class="player-clock clock-time" id="player-clock-top" style="display: none;">10:00</div>
           </div>
@@ -300,6 +303,7 @@ export function initApp(): void {
             <div class="player-info">
               <span class="player-color-indicator white" id="player-indicator-bottom"></span>
               <span class="player-name" id="player-name-bottom">Белые</span>
+              <span class="player-checks-badge" id="player-checks-bottom" style="display: none;">+0</span>
             </div>
             <div class="player-clock clock-time" id="player-clock-bottom" style="display: none;">10:00</div>
           </div>
@@ -371,6 +375,7 @@ export function initApp(): void {
     <div class="screen screen-analysis" id="screen-analysis" style="display: none;"></div>
     <div class="screen screen-settings" id="screen-settings" style="display: none;"></div>
     <div class="screen screen-history" id="screen-history" style="display: none;"></div>
+    <div class="screen screen-variants" id="screen-variants" style="display: none;"></div>
   `;
 
   // Fullscreen Solar Game background mounted directly into document.body
@@ -450,6 +455,7 @@ export function initApp(): void {
     const analysisScreen = document.getElementById('screen-analysis');
     const settingsScreen = document.getElementById('screen-settings');
     const historyScreen = document.getElementById('screen-history');
+    const variantsScreen = document.getElementById('screen-variants');
     const solarBg = document.getElementById('solar-bg');
 
     const isHome = route === 'home';
@@ -458,6 +464,7 @@ export function initApp(): void {
     document.body.classList.toggle('game-active', isGame);
     document.body.classList.toggle('settings-active', route === 'settings');
     document.body.classList.toggle('history-active', route === 'history');
+    document.body.classList.toggle('variants-active', route === 'variants');
     updateSaturnBackground(route, app);
     updateMainMenuVisibility(route);
 
@@ -501,6 +508,11 @@ export function initApp(): void {
       historyScreen.style.display = isHistory ? 'flex' : 'none';
       historyScreen.classList.toggle('active', isHistory);
       if (isHistory && !archivedReview) historyArchive?.refresh();
+    }
+    if (variantsScreen) {
+      const isVariants = route === 'variants';
+      variantsScreen.style.display = isVariants ? 'flex' : 'none';
+      variantsScreen.classList.toggle('active', isVariants);
     }
     if (analysisScreen) {
       const isAnalysis = route === 'analysis';
@@ -551,8 +563,23 @@ export function initApp(): void {
       mode: params.mode,
       level: params.level,
       playerColor: params.playerColor,
+      variant: 'standard',
     });
     currentRouter?.navigate('game');
+  });
+
+  new VariantsUI(document.getElementById('screen-variants')!, {
+    onBack: () => currentRouter?.navigate('home'),
+    onStartVariantMatch: (config) => {
+      globalStore.setClockMode(config.timeControl);
+      globalStore.newGame(undefined, {
+        mode: config.mode,
+        level: config.level,
+        playerColor: config.playerColor,
+        variant: config.variant,
+      });
+      currentRouter?.navigate('game');
+    },
   });
 
   // Home screen menu actions
@@ -582,7 +609,7 @@ export function initApp(): void {
     showToast(t('common.soon'));
   });
   document.getElementById('btn-play-variants')?.addEventListener('click', () => {
-    showToast(t('common.soon'));
+    currentRouter?.navigate('variants');
   });
   document.getElementById('btn-analysis')?.addEventListener('click', () => {
     currentRouter?.navigate('analysis');
@@ -753,10 +780,12 @@ export function initApp(): void {
   const playerBarTop = document.getElementById('player-bar-top') as HTMLElement;
   const playerIndicatorTop = document.getElementById('player-indicator-top') as HTMLElement;
   const playerNameTop = document.getElementById('player-name-top') as HTMLElement;
+  const playerChecksTop = document.getElementById('player-checks-top') as HTMLElement | null;
   const playerClockTop = document.getElementById('player-clock-top') as HTMLElement;
 
   const playerIndicatorBottom = document.getElementById('player-indicator-bottom') as HTMLElement;
   const playerNameBottom = document.getElementById('player-name-bottom') as HTMLElement;
+  const playerChecksBottom = document.getElementById('player-checks-bottom') as HTMLElement | null;
   const playerClockBottom = document.getElementById('player-clock-bottom') as HTMLElement;
 
   const updatePlayerBars = (): void => {
@@ -772,6 +801,23 @@ export function initApp(): void {
 
     playerNameTop.textContent = getSideLabel(globalStore, topColor);
     playerNameBottom.textContent = getSideLabel(globalStore, bottomColor);
+
+    if (globalStore.getVariant() === 'three-check') {
+      const checks = globalStore.getChecksCount();
+      const topChecks = topColor === 'white' ? checks.white : checks.black;
+      const bottomChecks = bottomColor === 'white' ? checks.white : checks.black;
+      if (playerChecksTop) {
+        playerChecksTop.style.display = 'inline-flex';
+        playerChecksTop.textContent = `+${topChecks}`;
+      }
+      if (playerChecksBottom) {
+        playerChecksBottom.style.display = 'inline-flex';
+        playerChecksBottom.textContent = `+${bottomChecks}`;
+      }
+    } else {
+      if (playerChecksTop) playerChecksTop.style.display = 'none';
+      if (playerChecksBottom) playerChecksBottom.style.display = 'none';
+    }
 
     const turn = globalStore.getLiveState().turn;
     const isGameOver = globalStore.isGameOver();
@@ -895,6 +941,14 @@ export function initApp(): void {
       const winner = result.winner === 'white' ? 'Белые победили!' : 'Чёрные победили!';
       text = `Мат! ${winner}`;
       badgeHtml = '<span class="status-badge badge-over">Мат</span>';
+    } else if (result.type === 'kingOfTheHill') {
+      const winner = result.winner === 'white' ? 'Белые победили!' : 'Чёрные победили!';
+      text = `Царь горы! ${winner}`;
+      badgeHtml = '<span class="status-badge badge-over">Царь горы</span>';
+    } else if (result.type === 'threeCheck') {
+      const winner = result.winner === 'white' ? 'Белые победили!' : 'Чёрные победили!';
+      text = `Три шаха! ${winner}`;
+      badgeHtml = '<span class="status-badge badge-over">Три шаха</span>';
     } else if (result.type === 'stalemate') {
       text = 'Ничья! Пат.';
       badgeHtml = '<span class="status-badge badge-over">Пат</span>';

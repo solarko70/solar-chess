@@ -7,7 +7,7 @@
  * Other board sizes: material + pawn advancement only (safe for variants).
  */
 import type { GameState } from '@/core';
-import { Position, PAWN, KNIGHT, BISHOP, KING, WHITE } from './position';
+import { Position, PAWN, KNIGHT, BISHOP, KING, WHITE, BLACK } from './position';
 
 export const PIECE_VALUE = [0, 100, 320, 330, 500, 900, 0];
 const PHASE_WEIGHT = [0, 0, 1, 1, 2, 4, 0];
@@ -18,6 +18,15 @@ const DOUBLED_PAWN = 15;
 const SHIELD_NEAR = 12;
 const SHIELD_FAR = 6;
 const PAWN_ADVANCE = 8;
+const KOTH_MANHATTAN_PENALTY = 65;
+const THREE_CHECK_BONUS = [0, 350, 900, 100000];
+
+/** Manhattan distance from (x, y) to the closest of the 4 central squares (d4, e4, d5, e5). */
+export function kingHillManhattanDistance(x: number, y: number): number {
+  const dx = x < 3 ? 3 - x : x > 4 ? x - 4 : 0;
+  const dy = y < 3 ? 3 - y : y > 4 ? y - 4 : 0;
+  return dx + dy;
+}
 
 // Tables are written from White's point of view, index 0 = a8 (row 0).
 // prettier-ignore
@@ -106,6 +115,14 @@ let pawnFilesB = new Int32Array(8);
 
 /** Evaluate an internal search position (side-to-move perspective). */
 export function evaluatePosition(pos: Position): number {
+  if (pos.variant === 'king-of-the-hill') {
+    if (pos.isKingOnCenter(WHITE)) return pos.side === WHITE ? 100000 : -100000;
+    if (pos.isKingOnCenter(BLACK)) return pos.side === WHITE ? -100000 : 100000;
+  } else if (pos.variant === 'three-check') {
+    if (pos.checksW >= 3) return pos.side === WHITE ? 100000 : -100000;
+    if (pos.checksB >= 3) return pos.side === WHITE ? -100000 : 100000;
+  }
+
   const b = pos.board;
   const W = pos.width;
   const H = pos.height;
@@ -146,8 +163,13 @@ export function evaluatePosition(pos: Position): number {
       else bk = sq;
       if (is8) {
         const idx = white ? sq : (7 - y) * 8 + x;
-        kingMg += s * PST_KING_MG[idx];
-        kingEg += s * PST_KING_EG[idx];
+        if (pos.variant === 'king-of-the-hill') {
+          kingMg += s * PST_KING_EG[idx];
+          kingEg += s * PST_KING_EG[idx];
+        } else {
+          kingMg += s * PST_KING_MG[idx];
+          kingEg += s * PST_KING_EG[idx];
+        }
       }
       continue;
     }
@@ -179,8 +201,8 @@ export function evaluatePosition(pos: Position): number {
     }
   }
 
-  // Insufficient material: bare kings or a single minor piece -> dead draw
-  if (majorsOrPawns === 0 && minorsW + minorsB <= 1) return 0;
+  // Insufficient material: bare kings or a single minor piece -> dead draw (only in standard)
+  if (pos.variant === 'standard' && majorsOrPawns === 0 && minorsW + minorsB <= 1) return 0;
 
   if (phase > MAX_PHASE) phase = MAX_PHASE;
   let score = material + positional;
@@ -196,11 +218,13 @@ export function evaluatePosition(pos: Position): number {
       if (pawnFilesB[x] > 1) score += DOUBLED_PAWN * (pawnFilesB[x] - 1);
     }
 
-    // Middlegame king safety: pawn shield in front of the king
-    let safety = 0;
-    if (wk >= 0) safety += pawnShield(pos, wk, 1);
-    if (bk >= 0) safety -= pawnShield(pos, bk, -1);
-    kingMg += safety;
+    // Middlegame king safety: pawn shield in front of the king (disabled in King of the Hill)
+    if (pos.variant !== 'king-of-the-hill') {
+      let safety = 0;
+      if (wk >= 0) safety += pawnShield(pos, wk, 1);
+      if (bk >= 0) safety -= pawnShield(pos, bk, -1);
+      kingMg += safety;
+    }
 
     // Endgame mop-up: drive the losing king to the edge, bring own king closer
     let mop = 0;
@@ -214,6 +238,26 @@ export function evaluatePosition(pos: Position): number {
     }
 
     score += Math.trunc((kingMg * phase + (kingEg + mop) * (MAX_PHASE - phase)) / MAX_PHASE);
+  }
+
+  if (pos.variant === 'king-of-the-hill' && is8) {
+    if (wk >= 0) {
+      const distW = kingHillManhattanDistance(fileOf[wk], rankOf[wk]);
+      score -= distW * KOTH_MANHATTAN_PENALTY;
+      if (distW === 1) score += 120;
+    }
+    if (bk >= 0) {
+      const distB = kingHillManhattanDistance(fileOf[bk], rankOf[bk]);
+      score += distB * KOTH_MANHATTAN_PENALTY;
+      if (distB === 1) score -= 120;
+    }
+  } else if (pos.variant === 'three-check') {
+    const wIdx = Math.min(3, Math.max(0, pos.checksW));
+    const bIdx = Math.min(3, Math.max(0, pos.checksB));
+    score += THREE_CHECK_BONUS[wIdx] - THREE_CHECK_BONUS[bIdx];
+    if (pos.inCheck()) {
+      score += pos.side === WHITE ? -120 : 120;
+    }
   }
 
   return pos.side === WHITE ? score : -score;

@@ -103,3 +103,70 @@ describe('Threefold repetition', () => {
     solarAudio.setSoundTheme('cosmic');
   });
 });
+
+describe('King of the Hill & Three-Check rules (Stage 13a)', () => {
+  it('declares victory in King of the Hill when a king reaches d4, e4, d5, or e5', () => {
+    const centerTargets = [
+      { fen: '7k/8/8/8/8/3K4/8/8 w - - 0 1', from: 43, to: 35 }, // d3 -> d4
+      { fen: '7k/8/8/8/8/4K3/8/8 w - - 0 1', from: 44, to: 36 }, // e3 -> e4
+      { fen: '7k/8/8/2K5/8/8/8/8 w - - 0 1', from: 26, to: 27 }, // c5 -> d5
+      { fen: '8/8/3k4/8/8/8/8/7K b - - 0 1', from: 19, to: 28 }, // d6 -> e5 (black)
+    ];
+
+    for (const { fen, from, to } of centerTargets) {
+      const store = new ChessStore();
+      const initial = parseFEN(fen, 8, 8, 'king-of-the-hill');
+      store.newGame(initial, { variant: 'king-of-the-hill' });
+      const expectedWinner = initial.turn;
+      expect(store.makeMove(from, to)).toBe(true);
+      const res = store.getGameResult();
+      expect(res.type).toBe('kingOfTheHill');
+      expect(res.winner).toBe(expectedWinner);
+      expect(res.reason).toBe('king-of-the-hill-center');
+      expect(store.isGameOver()).toBe(true);
+    }
+  });
+
+  it('tracks checksCount and declares victory in Three-Check after 3 checks', () => {
+    // White Queen on e2 (52), Black King on e8 (4), White King on a1 (56)
+    const store = new ChessStore();
+    const initial = parseFEN('4k3/8/8/8/8/8/4Q3/K7 w - - 0 1', 8, 8, 'three-check');
+    store.newGame(initial, { variant: 'three-check' });
+    expect(store.getChecksCount()).toEqual({ white: 0, black: 0 });
+
+    // 1st check: Qe2-b5+ (52 -> 25) checks Black king on e8 (4)
+    expect(store.makeMove(52, 25)).toBe(true);
+    expect(store.getChecksCount()).toEqual({ white: 1, black: 0 });
+    expect(store.getGameResult().type).toBe('ongoing');
+
+    // Black replies Ke8-d8 (4 -> 3)
+    expect(store.makeMove(4, 3)).toBe(true);
+
+    // 2nd check: Qb5-b6+ (25 -> 17) checks Black king on d8 (3)
+    expect(store.makeMove(25, 17)).toBe(true);
+    expect(store.getChecksCount()).toEqual({ white: 2, black: 0 });
+    expect(store.getGameResult().type).toBe('ongoing');
+
+    // Undo restores checksCount to 1
+    expect(store.undo()).toBe(true);
+    expect(store.getChecksCount()).toEqual({ white: 1, black: 0 });
+
+    // Re-apply 2nd check: Qb5-b6+ (25 -> 17)
+    expect(store.makeMove(25, 17)).toBe(true);
+    expect(store.getChecksCount()).toEqual({ white: 2, black: 0 });
+
+    // Black replies Kd8-e8 (3 -> 4)
+    expect(store.makeMove(3, 4)).toBe(true);
+
+    // 3rd check: Qb6-e6+ (17 -> 20) checks Black king on e8 (4) -> immediate win
+    expect(store.makeMove(17, 20)).toBe(true);
+    expect(store.getChecksCount()).toEqual({ white: 3, black: 0 });
+    expect(store.getGameResult()).toEqual({
+      type: 'threeCheck',
+      status: 'win',
+      winner: 'white',
+      reason: 'three-check-limit',
+    });
+    expect(store.isGameOver()).toBe(true);
+  });
+});

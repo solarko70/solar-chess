@@ -65,8 +65,13 @@ describe('Screens & Navigation (Stage A1)', () => {
     expect(toast.textContent).toBe(t('common.soon'));
     expect(window.location.hash).toBe('#/');
 
-    // 2. Play variants
+    // 2. Play variants navigates to variants catalog screen
     document.getElementById('btn-play-variants')?.click();
+
+    expect(window.location.hash).toBe('#/variants');
+    document.getElementById('variants-back')?.click();
+    expect(window.location.hash).toBe('#/');
+
     expect(toast.style.display).toBe('block');
     expect(toast.textContent).toBe(t('common.soon'));
     expect(window.location.hash).toBe('#/');
@@ -469,9 +474,8 @@ describe('Home dropdown menu and top-right sound control (Stage 12b)', () => {
     expect(dropdown.querySelector('#menu-settings-item #settings-btn')).not.toBeNull();
     expect(dropdown.querySelector('#menu-history-item #history-btn')).not.toBeNull();
     expect(dropdown.querySelector('#theme-btn')).not.toBeNull();
-    const variants = dropdown.querySelector<HTMLButtonElement>('#menu-variants-item button')!;
-    expect(variants.disabled).toBe(true);
-    expect(variants.querySelector('.main-menu-badge')?.textContent).toBe(t('common.soon'));
+    expect(dropdown.querySelector('#menu-variants-item')).toBeNull();
+    expect(dropdown.querySelectorAll(':scope > li')).toHaveLength(3);
     expect(dropdown.textContent).not.toMatch(/[\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}]/u);
   });
 

@@ -1,6 +1,7 @@
 import type { CastlingRights, Color, GameState, Move, Square } from '../types';
 import { cloneBoard, toCoords, toSquare } from '../board';
 import { positionKey } from '../notation/fen';
+import { isInCheck } from './legal';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -95,7 +96,17 @@ export function applyMove(state: GameState, move: Move): GameState {
   const newTurn: Color = state.turn === 'white' ? 'black' : 'white';
   const newFullmove = state.fullMoveNumber + (state.turn === 'black' ? 1 : 0);
 
-  const newHistory = [...state.history, { ...move, prevPositionCounts: state.positionCounts }];
+  const prevChecks = state.checksCount ?? { white: 0, black: 0 };
+  const givesCheck = isInCheck(newBoard, newTurn);
+  const checksCount = {
+    white: prevChecks.white + (state.turn === 'white' && givesCheck ? 1 : 0),
+    black: prevChecks.black + (state.turn === 'black' && givesCheck ? 1 : 0),
+  };
+
+  const newHistory = [
+    ...state.history,
+    { ...move, prevPositionCounts: state.positionCounts, prevChecksCount: prevChecks },
+  ];
 
   // Temp state to compute position key
   const tempState: GameState = {
@@ -108,6 +119,8 @@ export function applyMove(state: GameState, move: Move): GameState {
     history: newHistory,
     positionHistory: [],
     positionCounts: state.positionCounts,
+    variant: state.variant ?? 'standard',
+    checksCount,
   };
 
   const currentKey = positionKey(tempState);
@@ -125,6 +138,8 @@ export function applyMove(state: GameState, move: Move): GameState {
     history: newHistory,
     positionHistory: newPosHistory,
     positionCounts,
+    variant: state.variant ?? 'standard',
+    checksCount,
   };
   return next;
 }
@@ -176,5 +191,7 @@ export function undoMove(state: GameState): GameState {
     history,
     positionHistory: move.prevPositionHistory,
     positionCounts: move.prevPositionCounts ?? new Map(),
+    variant: state.variant ?? 'standard',
+    checksCount: move.prevChecksCount ? { ...move.prevChecksCount } : { white: 0, black: 0 },
   };
 }

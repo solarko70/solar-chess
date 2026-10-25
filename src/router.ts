@@ -1,4 +1,4 @@
-export type AppRoute = 'home' | 'game' | 'analysis' | 'settings' | 'history';
+export type AppRoute = 'home' | 'game' | 'analysis' | 'settings' | 'history' | 'variants';
 
 export function parseRouteHash(hash: string): AppRoute {
   const clean = hash.replace(/^#\/?/, '').trim().toLowerCase();
@@ -6,6 +6,7 @@ export function parseRouteHash(hash: string): AppRoute {
   if (clean === 'analysis') return 'analysis';
   if (clean === 'settings') return 'settings';
   if (clean === 'history') return 'history';
+  if (clean === 'variants') return 'variants';
   return 'home';
 }
 

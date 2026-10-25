@@ -2,6 +2,12 @@
 export type Color = 'white' | 'black';
 export type PieceType = 'pawn' | 'knight' | 'bishop' | 'rook' | 'queen' | 'king';
 export type Square = number; // y * width + x
+export type VariantId = 'standard' | 'king-of-the-hill' | 'three-check';
+
+export interface ChecksCount {
+  white: number;
+  black: number;
+}
 
 export interface Coords {
   x: number;
@@ -40,6 +46,7 @@ export interface Move {
   prevHalfmove: number;
   prevPositionHistory: string[];
   prevPositionCounts?: ReadonlyMap<string, number>;
+  prevChecksCount?: ChecksCount;
   // flags
   promotion?: PieceType;
   castling?: 'kingside' | 'queenside';
@@ -57,6 +64,8 @@ export interface GameState {
   history: Move[];
   positionHistory: string[]; // position key (no counters) for threefold repetition
   positionCounts: ReadonlyMap<string, number>;
+  variant?: VariantId;
+  checksCount?: ChecksCount;
 }
 
 // ── PieceDef (data-driven, no if-chains) ─────────────────────────────────────
@@ -69,6 +78,8 @@ export interface PieceDef {
 // ── GameResult ────────────────────────────────────────────────────────────────
 export type GameResultType =
   | 'checkmate'
+  | 'kingOfTheHill'
+  | 'threeCheck'
   | 'stalemate'
   | 'threefoldRepetition'
   | 'fiftyMoveRule'
@@ -77,9 +88,10 @@ export type GameResultType =
 
 export interface GameResult {
   type: GameResultType;
-  status?: 'draw';
-  reason?: 'threefold-repetition';
-  winner?: Color; // only set for checkmate
+  status?: 'draw' | 'win';
+  reason?: 'threefold-repetition' | 'king-of-the-hill-center' | 'three-check-limit';
+  winner?: Color; // set for checkmate and variant wins
+
 }
 
 // ── RuleSet ───────────────────────────────────────────────────────────────────

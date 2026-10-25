@@ -25,7 +25,6 @@ export function buildSettingsButton(): string {
 }
 
 const CHEVRON_DOWN_ICON = `<svg class="main-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>`;
-const VARIANTS_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>`;
 
 /**
  * Home-only dropdown in the top-left corner that groups the archive,
@@ -45,13 +44,6 @@ export function buildMainMenu(themeIcon: string): string {
           <span class="main-menu-icon" data-theme-icon>${themeIcon}</span>
           <span class="main-menu-label menu-item-label">${t('nav.theme')}</span>
           <span class="main-menu-value" data-theme-value>${t('nav.themeDark')}</span>
-        </button>
-      </li>
-      <li class="main-menu-row" id="menu-variants-item" role="none">
-        <button type="button" class="main-menu-item main-menu-item-soon" id="menu-variants-btn" role="menuitem" aria-disabled="true" disabled>
-          <span class="main-menu-icon">${VARIANTS_ICON}</span>
-          <span class="main-menu-label menu-item-label">${t('nav.variants')}</span>
-          <span class="main-menu-badge">${t('common.soon')}</span>
         </button>
       </li>
     </ul>

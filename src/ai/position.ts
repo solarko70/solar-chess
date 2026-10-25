@@ -9,7 +9,7 @@
  *
  * Works for any board size up to 1024 squares (moves are packed into 31-bit ints).
  */
-import type { GameState, Move, PieceType } from '@/core';
+import type { GameState, Move, PieceType, VariantId } from '@/core';
 import { parseFEN } from '@/core';
 
 // ── Piece codes ─────────────────────────────────────────────────────────────
@@ -255,6 +255,9 @@ export class Position {
   halfmove = 0;
   hashHi = 0;
   hashLo = 0;
+  variant: VariantId = 'standard';
+  checksW = 0;
+  checksB = 0;
   readonly kingSq = new Int32Array([-1, -1]);
 
   // Undo stack
@@ -266,6 +269,8 @@ export class Position {
   private readonly uHalf = new Int32Array(MAX_UNDO);
   private readonly uHashHi = new Int32Array(MAX_UNDO);
   private readonly uHashLo = new Int32Array(MAX_UNDO);
+  private readonly uChecksW = new Int32Array(MAX_UNDO);
+  private readonly uChecksB = new Int32Array(MAX_UNDO);
 
   // Hash history for repetition detection (game history + search path)
   private readonly histHi: number[] = [];
@@ -328,6 +333,9 @@ export class Position {
       (cr.black.queenside ? CR_BQ : 0);
     this.ep = state.enPassantSquare ?? -1;
     this.halfmove = state.halfMoveClock;
+    this.variant = state.variant ?? 'standard';
+    this.checksW = state.checksCount?.white ?? 0;
+    this.checksB = state.checksCount?.black ?? 0;
     this.computeHash();
     this.histHi.length = 0;
     this.histLo.length = 0;
@@ -426,6 +434,28 @@ export class Position {
     const mover = this.side ^ 1;
     const k = this.kingSq[mover];
     return k >= 0 && this.isAttacked(k, this.side);
+  }
+
+  /** True if the king of `side` occupies one of the four central squares (d4, e4, d5, e5). */
+  isKingOnCenter(side: number): boolean {
+    if (this.width !== 8 || this.height !== 8) return false;
+    const k = this.kingSq[side];
+    if (k < 0) return false;
+    const x = this.geo.fileOf[k];
+    const y = this.geo.rankOf[k];
+    return (x === 3 || x === 4) && (y === 3 || y === 4);
+  }
+
+  /** True if the side that just moved achieved an immediate variant win. */
+  isVariantWinForMover(): boolean {
+    const mover = this.side ^ 1;
+    if (this.variant === 'king-of-the-hill') {
+      return this.isKingOnCenter(mover);
+    }
+    if (this.variant === 'three-check') {
+      return mover === WHITE ? this.checksW >= 3 : this.checksB >= 3;
+    }
+    return false;
   }
 
   // ── Move generation (pseudo-legal) ────────────────────────────────────────
@@ -575,6 +605,8 @@ export class Position {
     this.uHalf[u] = this.halfmove;
     this.uHashHi[u] = this.hashHi;
     this.uHashLo[u] = this.hashLo;
+    this.uChecksW[u] = this.checksW;
+    this.uChecksB[u] = this.checksB;
 
     let hi = this.hashHi;
     let lo = this.hashLo;
@@ -645,6 +677,10 @@ export class Position {
     this.hashLo = lo;
     this.histHi.push(hi);
     this.histLo.push(lo);
+    if (this.variant === 'three-check' && this.inCheck()) {
+      if (us === WHITE) this.checksW++;
+      else this.checksB++;
+    }
   }
 
   unmake(m: number): void {
@@ -684,6 +720,8 @@ export class Position {
     this.halfmove = this.uHalf[u];
     this.hashHi = this.uHashHi[u];
     this.hashLo = this.uHashLo[u];
+    this.checksW = this.uChecksW[u];
+    this.checksB = this.uChecksB[u];
     this.histHi.pop();
     this.histLo.pop();
   }
