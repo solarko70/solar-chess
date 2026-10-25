@@ -1,18 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearAllHistory, deleteGameFromHistory, GAME_HISTORY_STORAGE_KEY,
-  getGameById, getGameHistory, saveGameToHistory, type GameRecord,
+  getGameById, getGameHistory, saveGameToHistory, toggleFavorite, type GameRecord,
 } from '@/storage/history';
 import { ChessStore } from '@/state/store';
 import { trackGameHistory } from '@/state/game-history';
 import { HistoryArchiveUI } from '@/ui/history';
 import type { ReviewRunResult } from '@/analysis';
+import { serializeFEN } from '@/core';
+import { setPieceSet } from '@/ui/pieces';
+
+const FINAL_FEN = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2';
+const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 function record(id = 'game-1', result: GameRecord['result'] = 'win', timestamp = 1000): GameRecord {
   return {
     id, timestamp, dateFormatted: '25.10.2026, 12:30', mode: 'pvp', opponentTitle: 'Локальный игрок',
     playerColor: 'white', timeControl: '3+2', result, reason: 'resignation', movesCount: 2,
     pgn: '[Result "1-0"]\n\n1. e4 e5 2. Nf3 1-0',
+    finalFen: FINAL_FEN, isFavorite: false,
   };
 }
 
@@ -69,6 +75,63 @@ describe('Game history storage', () => {
     expect(() => deleteGameFromHistory('missing')).not.toThrow();
     vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('Denied'); });
     expect(() => clearAllHistory()).not.toThrow();
+  });
+
+  it('toggles favorites, persists both states and ignores unknown IDs', () => {
+    saveGameToHistory(record());
+    expect(toggleFavorite('game-1')).toBe(true);
+    expect(getGameById('game-1')?.isFavorite).toBe(true);
+    expect(JSON.parse(localStorage.getItem(GAME_HISTORY_STORAGE_KEY)!)[0].isFavorite).toBe(true);
+    expect(toggleFavorite('game-1')).toBe(false);
+    expect(JSON.parse(localStorage.getItem(GAME_HISTORY_STORAGE_KEY)!)[0].isFavorite).toBe(false);
+    expect(toggleFavorite('missing')).toBe(false);
+    expect(getGameHistory()).toHaveLength(1);
+  });
+
+  it('derives the final FEN when a new record only provides PGN', () => {
+    const game = record();
+    delete game.finalFen;
+    delete game.isFavorite;
+    saveGameToHistory(game);
+    expect(getGameById(game.id)).toMatchObject({ finalFen: FINAL_FEN, isFavorite: false });
+    expect(JSON.parse(localStorage.getItem(GAME_HISTORY_STORAGE_KEY)!)[0].finalFen).toBe(FINAL_FEN);
+  });
+
+  it('migrates old records once and safely falls back for unreadable notation', () => {
+    const legacy = record('legacy');
+    delete legacy.finalFen;
+    delete legacy.isFavorite;
+    localStorage.setItem(GAME_HISTORY_STORAGE_KEY, JSON.stringify([
+      legacy, { ...legacy, id: 'broken', pgn: 'invalid notation', finalFen: '<svg onload=alert(1)>' },
+    ]));
+    expect(getGameById('legacy')).toMatchObject({ finalFen: FINAL_FEN, isFavorite: false });
+    expect(getGameById('broken')?.finalFen).toBe(INITIAL_FEN);
+    expect(JSON.parse(localStorage.getItem(GAME_HISTORY_STORAGE_KEY)!)[0].finalFen).toBe(FINAL_FEN);
+    const write = vi.spyOn(Storage.prototype, 'setItem');
+    getGameHistory();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('keeps favorite state and final FEN while an existing record receives accuracy', () => {
+    saveGameToHistory(record());
+    toggleFavorite('game-1');
+    const update = { ...record(), whiteAccuracy: 96 };
+    delete update.isFavorite;
+    delete update.finalFen;
+    saveGameToHistory(update);
+    expect(getGameById('game-1')).toMatchObject({ isFavorite: true, finalFen: FINAL_FEN, whiteAccuracy: 96 });
+  });
+
+  it('retains the saved favorite state when a write is blocked', () => {
+    saveGameToHistory(record());
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota'); });
+    expect(toggleFavorite('game-1')).toBe(false);
+    expect(getGameById('game-1')?.isFavorite).toBe(false);
+    write.mockRestore();
+    toggleFavorite('game-1');
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota'); });
+    expect(toggleFavorite('game-1')).toBe(true);
+    expect(getGameById('game-1')?.isFavorite).toBe(true);
   });
 });
 
@@ -144,6 +207,14 @@ describe('Game history autosave', () => {
     store.resign('black');
     expect(getGameHistory()).toHaveLength(2);
   });
+
+  it('saves the live final position even after navigating back through moves', () => {
+    for (const [from, to] of [[53, 45], [12, 28], [54, 38], [3, 39]]) store.makeMove(from, to);
+    const finalFen = serializeFEN(store.getLiveState());
+    store.setViewIndex(-1);
+    expect(getGameById(store.getGameId())?.finalFen).toBe(finalFen);
+    expect(finalFen).not.toBe(INITIAL_FEN);
+  });
 });
 
 describe('Game history screen', () => {
@@ -160,7 +231,7 @@ describe('Game history screen', () => {
 
   it('shows the empty state and all result filters', () => {
     expect(container.textContent).toContain('Пока нет завершённых партий. Сыграйте с ботом или другом!');
-    expect(container.querySelectorAll('[data-history-filter]')).toHaveLength(4);
+    expect(container.querySelectorAll('[data-history-filter]')).toHaveLength(5);
   });
 
   it('renders metadata and accuracy and filters wins, losses and draws', () => {
@@ -219,5 +290,84 @@ describe('Game history screen', () => {
     expect(container.querySelector('img, script')).toBeNull();
     expect(container.querySelector('h2')?.textContent).toBe('<img src=x onerror=alert(1)>');
   });
+
+  it('renders a lightweight hidden mini board with shared vector pieces', () => {
+    saveGameToHistory(record());
+    screen.refresh();
+    const mini = container.querySelector<HTMLElement>('.game-card-miniboard')!;
+    expect(mini.getAttribute('aria-hidden')).toBe('true');
+    expect(mini.querySelector('svg')?.getAttribute('width')).toBe('84');
+    expect(mini.querySelectorAll('use')).toHaveLength(32);
+    expect(mini.querySelector('button, [tabindex], foreignObject, image')).toBeNull();
+    const knight = mini.querySelector('[data-square="45"]')!;
+    expect([knight.getAttribute('x'), knight.getAttribute('y')]).toEqual(['50', '50']);
+    expect(knight.getAttribute('href')).toContain('-white-n');
+    for (const piece of mini.querySelectorAll('use')) {
+      expect(container.querySelector(piece.getAttribute('href')!)).not.toBeNull();
+    }
+    expect(mini.querySelectorAll('*').length).toBeLessThan(40);
+  });
+
+  it('orients the miniature for black and keeps the active piece set synchronized', () => {
+    saveGameToHistory({ ...record(), playerColor: 'black' });
+    screen.refresh();
+    const mini = container.querySelector('.game-card-miniboard')!;
+    expect(mini.getAttribute('data-orientation')).toBe('black');
+    const knight = mini.querySelector('[data-square="45"]')!;
+    expect([knight.getAttribute('x'), knight.getAttribute('y')]).toEqual(['20', '20']);
+    try {
+      setPieceSet('solar');
+      expect(container.querySelectorAll('.archive-piece-sprite svg[data-piece-set="solar"]')).toHaveLength(12);
+    } finally { setPieceSet('classic'); }
+  });
+
+  it('toggles the star in place and preserves the existing card action buttons', () => {
+    saveGameToHistory(record());
+    screen.refresh();
+    const card = container.querySelector('.archive-card')!;
+    const star = card.querySelector<HTMLButtonElement>('.btn-favorite')!;
+    expect(card.querySelector('.btn-review')).not.toBeNull();
+    expect(card.querySelector('.btn-pgn')).not.toBeNull();
+    expect(card.querySelector('.btn-delete')?.nextElementSibling).toBe(star);
+    star.querySelector('path')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(card.querySelector('.btn-favorite')).toBe(star);
+    expect(star.classList.contains('active')).toBe(true);
+    expect(star.getAttribute('aria-pressed')).toBe('true');
+    expect(star.getAttribute('aria-label')).toBe('Убрать из избранного');
+    expect(getGameById('game-1')?.isFavorite).toBe(true);
+    star.click();
+    expect(star.classList.contains('active')).toBe(false);
+    expect(star.getAttribute('aria-label')).toBe('В избранное');
+  });
+
+  it('filters favorites and removes unstarred cards from the active favorites tab', () => {
+    saveGameToHistory(record('other'));
+    saveGameToHistory({ ...record('favorite', 'loss'), isFavorite: true });
+    screen.refresh();
+    const filter = container.querySelector<HTMLButtonElement>('.filter-btn[data-filter="favorites"]')!;
+    filter.click();
+    expect(container.querySelectorAll('.archive-card')).toHaveLength(1);
+    expect(container.querySelector<HTMLElement>('.archive-card')?.dataset.gameId).toBe('favorite');
+    const star = container.querySelector<HTMLButtonElement>('.btn-favorite')!;
+    star.focus();
+    star.click();
+    expect(container.querySelector('.archive-card')).toBeNull();
+    expect(container.textContent).toContain('В избранном пока нет партий. Нажмите на звёздочку на карточке партии, чтобы добавить её сюда!');
+    expect(document.activeElement).toBe(filter);
+    container.querySelector<HTMLButtonElement>('[data-history-filter="all"]')!.click();
+    expect(container.querySelectorAll('.archive-card')).toHaveLength(2);
+  });
+
+  it.each([[69.9, 'slate'], [70, 'emerald'], [80, 'emerald'], [80.1, 'gold']])(
+    'renders accuracy %s with the %s tier and a static progress ring', (accuracy, tier) => {
+      saveGameToHistory({ ...record(), whiteAccuracy: Number(accuracy), blackAccuracy: 0 });
+      screen.refresh();
+      const chip = container.querySelector(`.archive-accuracy-white.accuracy-${tier}`)!;
+      expect(chip.querySelector('strong')?.textContent).toBe(`${Number(accuracy).toFixed(1)}%`);
+      expect(chip.querySelector('.accuracy-progress')?.getAttribute('stroke-dasharray')).toBe(`${accuracy} 100`);
+      expect(chip.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+      expect(container.querySelector('.archive-accuracy-black strong')?.textContent).toBe('0.0%');
+    },
+  );
 });
 

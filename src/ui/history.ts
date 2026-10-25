@@ -1,16 +1,43 @@
 import { ChessStore, type VariationNode } from '@/state/store';
-import { moveToSAN, classicalRuleSet } from '@/core';
+import { moveToSAN, classicalRuleSet, parseFEN, serializeFEN, type PieceType } from '@/core';
 import { scoreToCp, getMoveClassMeta, identifyOpening } from '@/analysis';
 import { solarAudio } from '@/audio/solar-audio';
 import { triggerReviewMoveEffects } from './reviewpanel';
-import { deleteGameFromHistory, getGameHistory, type GameRecord } from '@/storage/history';
+import { deleteGameFromHistory, getGameHistory, toggleFavorite, type GameRecord } from '@/storage/history';
 import { t } from '@/i18n';
+import { getPieceSvg, PIECE_SYMBOLS } from './pieces';
 
 const ARCHIVE_ICONS = {
   review: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M7 11l2-3 3 4 2-3"/>',
   pgn: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
   delete: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+  favorite: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z"/>',
 };
+
+let archiveSpriteSequence = 0;
+
+/** One shared set of vector pieces serves every thumbnail in this archive. */
+function buildArchiveSprite(prefix: string): string {
+  return `<svg class="archive-piece-sprite" width="0" height="0" aria-hidden="true" focusable="false"><defs>${
+    (['white', 'black'] as const).flatMap((color) => (Object.keys(PIECE_SYMBOLS) as PieceType[]).map((type) =>
+      `<symbol id="${prefix}-${color}-${PIECE_SYMBOLS[type]}" viewBox="0 0 100 100">${getPieceSvg(type, color)}</symbol>`)).join('')
+  }</defs></svg>`;
+}
+
+function buildArchiveMiniBoard(record: GameRecord, prefix: string): string {
+  const state = parseFEN(record.finalFen ?? serializeFEN(classicalRuleSet.getInitialState()));
+  let darkSquares = '';
+  let pieces = '';
+  for (let square = 0; square < 64; square++) {
+    const display = record.playerColor === 'black' ? 63 - square : square;
+    const x = display % 8 * 10;
+    const y = Math.floor(display / 8) * 10;
+    if ((display % 8 + Math.floor(display / 8)) % 2) darkSquares += `M${x} ${y}h10v10h-10Z`;
+    const piece = state.board.pieces[square];
+    if (piece) pieces += `<use href="#${prefix}-${piece.color}-${PIECE_SYMBOLS[piece.type]}" x="${x}" y="${y}" width="10" height="10" data-square="${square}"/>`;
+  }
+  return `<div class="game-card-miniboard" aria-hidden="true" data-orientation="${record.playerColor}"><svg viewBox="0 0 80 80" width="84" height="84" aria-hidden="true" focusable="false"><rect width="80" height="80" class="archive-square-light"/><path d="${darkSquares}" class="archive-square-dark"/>${pieces}</svg></div>`;
+}
 
 export function archiveIcon(name: keyof typeof ARCHIVE_ICONS): string {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ARCHIVE_ICONS[name]}</svg>`;
@@ -28,22 +55,26 @@ export interface HistoryArchiveOptions {
 }
 
 export class HistoryArchiveUI {
-  private filter: GameRecord['result'] | 'all' = 'all';
+  private filter: GameRecord['result'] | 'all' | 'favorites' = 'all';
+  private readonly spritePrefix = `archive-piece-${++archiveSpriteSequence}`;
   private list: HTMLElement;
   private toast: HTMLElement;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private events = new AbortController();
 
   constructor(private container: HTMLElement, private options: HistoryArchiveOptions) {
-    container.innerHTML = `<div class="archive-center">
+    const instantMotion = (typeof process !== 'undefined' && process.env?.VITEST === 'true') ||
+      /jsdom/i.test(window.navigator?.userAgent ?? '');
+    container.innerHTML = `<div class="archive-center" data-instant-motion="${instantMotion}">
+      ${buildArchiveSprite(this.spritePrefix)}
       <header class="archive-header">
         <a href="#/" class="settings-back" id="history-back">${t('history.back')}</a>
         <p class="settings-eyebrow">SOLAR CHESS / PGN</p>
         <h1>${t('history.title')}</h1><p class="settings-intro">${t('history.intro')}</p>
       </header>
       <div class="archive-filters" role="group" aria-label="${t('history.title')}">
-        ${(['all', 'win', 'loss', 'draw'] as const).map((value, index) =>
-          `<button type="button" class="solar-btn-ghost" data-history-filter="${value}" aria-pressed="${index === 0}">${t(['history.all', 'history.wins', 'history.losses', 'history.draws'][index])}</button>`).join('')}
+        ${(['all', 'win', 'loss', 'draw', 'favorites'] as const).map((value, index) =>
+          `<button type="button" class="solar-btn-ghost filter-btn" data-filter="${value}" data-history-filter="${value}" aria-pressed="${index === 0}">${t(['history.all', 'history.wins', 'history.losses', 'history.draws', 'history.favorites'][index])}</button>`).join('')}
       </div>
       <div class="archive-list" aria-live="polite"></div>
       <div class="archive-toast solar-card" role="status" hidden></div>
@@ -59,38 +90,46 @@ export class HistoryArchiveUI {
     const focusedId = focused?.closest<HTMLElement>('.archive-card')?.dataset.gameId;
     const focusedAction = focused?.dataset.historyAction;
     const records = getGameHistory();
-    const visible = records.filter((record) => this.filter === 'all' || record.result === this.filter);
+    const visible = records.filter((record) => this.filter === 'all' ||
+      (this.filter === 'favorites' ? record.isFavorite === true : record.result === this.filter));
     this.list.replaceChildren();
     if (!visible.length) {
-      this.list.innerHTML = `<div class="archive-empty solar-card">${archiveIcon('review')}<p>${t(records.length ? 'history.noMatches' : 'history.empty')}</p></div>`;
+      this.list.innerHTML = `<div class="archive-empty solar-card">${archiveIcon(this.filter === 'favorites' ? 'favorite' : 'review')}<p>${t(this.filter === 'favorites' ? 'history.noFavorites' : records.length ? 'history.noMatches' : 'history.empty')}</p></div>`;
+      if (focusedId) this.container.querySelector<HTMLButtonElement>('.filter-btn[aria-pressed="true"]')?.focus();
       return;
     }
     for (const record of visible) this.list.appendChild(this.createCard(record));
     if (focusedId && focusedAction) {
       const card = [...this.list.querySelectorAll<HTMLElement>('.archive-card')]
         .find((element) => element.dataset.gameId === focusedId);
-      card?.querySelector<HTMLButtonElement>(`[data-history-action="${focusedAction}"]`)?.focus({ preventScroll: true });
+      (card ?? this.list).querySelector<HTMLButtonElement>(`[data-history-action="${focusedAction}"]`)?.focus({ preventScroll: true });
     }
   }
 
   private createCard(record: GameRecord): HTMLElement {
     const card = document.createElement('article');
-    card.className = 'archive-card solar-card';
+    card.className = `archive-card solar-card${record.isFavorite ? ' is-favorite' : ''}`;
     card.dataset.gameId = record.id;
     const accuracy = (['white', 'black'] as const).map((side) => {
       const value = record[side === 'white' ? 'whiteAccuracy' : 'blackAccuracy'];
-      return value === undefined ? '' : `<span class="archive-accuracy">${t(`history.${side}`)}: ${value.toFixed(1)}%</span>`;
+      if (value === undefined) return '';
+      const percent = Math.max(0, Math.min(100, value));
+      const tier = percent > 80 ? 'gold' : percent >= 70 ? 'emerald' : 'slate';
+      return `<span class="archive-accuracy archive-accuracy-${side} accuracy-${tier}"><svg class="archive-accuracy-ring" viewBox="0 0 28 28" aria-hidden="true" focusable="false"><circle class="accuracy-track" cx="14" cy="14" r="11"/><circle class="accuracy-progress" cx="14" cy="14" r="11" pathLength="100" stroke-dasharray="${percent} 100"/></svg><span class="accuracy-side" aria-hidden="true"></span><span>${t(`history.${side}`)}: <strong>${percent.toFixed(1)}%</strong></span></span>`;
     }).join('');
     card.innerHTML = `<div class="archive-card-heading">
       <span class="archive-result archive-result-${record.result}">${t(`history.${record.result}`)}</span>
       <time datetime="${new Date(record.timestamp).toISOString()}">${escapeHistoryText(record.dateFormatted)}</time>
     </div>
+    <div class="archive-card-body"><div class="archive-card-details">
     <h2>${escapeHistoryText(record.opponentTitle)}</h2>
     <p class="archive-meta">${t(`history.${record.playerColor}`)} · ${escapeHistoryText(record.timeControl)} · ${t('history.moves')}: ${record.movesCount}</p>
     <p class="archive-meta">${escapeHistoryText(t(`history.${record.reason}`))}</p>
+    </div>${buildArchiveMiniBoard(record, this.spritePrefix)}</div>
     <div class="archive-accuracies" aria-label="${t('history.accuracy')}">${accuracy}</div>
     <div class="archive-actions">${(['review', 'pgn', 'delete'] as const).map((action) =>
-      `<button type="button" class="${action === 'review' ? 'solar-btn' : 'solar-btn-ghost'}" data-history-action="${action}">${archiveIcon(action)}<span>${action === 'pgn' ? 'PGN' : t(`history.${action}`)}</span></button>`).join('')}</div>`;
+      `<button type="button" class="${action === 'review' ? 'solar-btn' : 'solar-btn-ghost'} btn-${action}" data-history-action="${action}">${archiveIcon(action)}<span>${action === 'pgn' ? 'PGN' : t(`history.${action}`)}</span></button>`).join('')}
+      <button type="button" class="solar-btn-ghost btn-favorite${record.isFavorite ? ' active' : ''}" data-history-action="favorite" aria-pressed="${record.isFavorite === true}" aria-label="${t(record.isFavorite ? 'history.removeFavorite' : 'history.addFavorite')}" title="${t(record.isFavorite ? 'history.removeFavorite' : 'history.addFavorite')}">${archiveIcon('favorite')}</button></div>`;
     return card;
   }
 
@@ -113,6 +152,17 @@ export class HistoryArchiveUI {
     const id = button?.closest<HTMLElement>('[data-game-id]')?.dataset.gameId;
     const record = getGameHistory().find((item) => item.id === id);
     if (!button || !record) return;
+    if (button.dataset.historyAction === 'favorite') {
+      const isFavorite = toggleFavorite(record.id);
+      button.classList.toggle('active', isFavorite);
+      button.setAttribute('aria-pressed', String(isFavorite));
+      const label = t(isFavorite ? 'history.removeFavorite' : 'history.addFavorite');
+      button.setAttribute('aria-label', label);
+      button.title = label;
+      button.closest('.archive-card')?.classList.toggle('is-favorite', isFavorite);
+      if (this.filter === 'favorites' && !isFavorite) this.refresh();
+      return;
+    }
     if (button.dataset.historyAction === 'review') this.options.onReview(record);
     if (button.dataset.historyAction === 'pgn') void this.copyPGN(record.pgn);
     if (button.dataset.historyAction === 'delete') {

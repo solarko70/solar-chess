@@ -1,6 +1,6 @@
 import { LEVELS } from '@/ai';
 import { getSidePerformanceRating } from '@/analysis';
-import { exportPGN } from '@/core';
+import { exportPGN, serializeFEN } from '@/core';
 import { APP_NAME } from '@/config';
 import { getGameById, saveGameToHistory, type GameRecord } from '@/storage/history';
 import { TIME_CONTROLS, type ChessStore } from './store';
@@ -24,6 +24,7 @@ function createRecord(store: ChessStore): GameRecord {
     reason: store.getTimedOutLoser() ? 'timeout' : store.getResignedPlayer() ? 'resignation' :
       result.type === 'threefoldRepetition' ? 'threefold' : result.type,
     movesCount: Math.ceil(store.getLiveState().history.length / 2),
+    finalFen: serializeFEN(store.getLiveState()),
     pgn: exportPGN(store.getLiveState(), {
       Site: APP_NAME, Result: pgnResult,
       White: playerColor === 'white' ? 'Вы' : opponentTitle,
