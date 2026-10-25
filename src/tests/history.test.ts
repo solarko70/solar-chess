@@ -292,17 +292,49 @@ describe('Game history screen', () => {
     saveGameToHistory({ ...record(), whiteAccuracy: 95 });
     screen.refresh();
     const card = container.querySelector<HTMLElement>('.history-card')!;
-    const details = card.querySelector('.archive-card-details')!;
-    const preview = card.querySelector('.archive-card-preview')!;
+    const header = card.querySelector('.history-card-header')!;
+    const body = card.querySelector('.history-card-body')!;
+    const details = body.querySelector('.card-info-col')!;
+    const preview = body.querySelector('.card-board-col')!;
     const mini = preview.querySelector('.game-card-miniboard')!;
-    expect(getComputedStyle(card).gridTemplateColumns).toBe('minmax(0, 1fr) 140px');
-    for (const selector of ['.archive-result', 'h2', '.archive-meta', '.archive-accuracies', '.archive-actions']) {
+    expect(getComputedStyle(card).display).toBe('flex');
+    expect(getComputedStyle(card).flexDirection).toBe('column');
+    expect(header.querySelector('.card-badge')).not.toBeNull();
+    expect(header.querySelector('.card-date')?.textContent).toBe(record().dateFormatted);
+    for (const selector of ['h2.card-opponent-title', '.archive-meta', '.archive-accuracies']) {
       expect(details.querySelector(selector)).not.toBeNull();
     }
-    expect(preview.querySelector('time')?.nextElementSibling).toBe(mini);
+    expect(header.nextElementSibling).toBe(body);
+    expect(details.nextElementSibling).toBe(preview);
+    expect(getComputedStyle(body).alignItems).toBe('flex-start');
+    expect(getComputedStyle(preview).alignSelf).toBe('flex-start');
     expect(parseFloat(getComputedStyle(mini).width)).toBe(140);
     expect(parseFloat(getComputedStyle(mini).height)).toBe(140);
     expect(getComputedStyle(mini).flexShrink).toBe('0');
+  });
+
+  it('keeps all four actions in one full-width footer below the match body', () => {
+    saveGameToHistory(record());
+    screen.refresh();
+    const card = container.querySelector('.history-card')!;
+    const body = card.querySelector('.history-card-body')!;
+    const footer = card.querySelector('.history-card-actions.card-footer')!;
+    expect([...card.children]).toEqual([card.querySelector('.history-card-header'), body, footer]);
+    expect(body.querySelector('button')).toBeNull();
+    expect(footer.querySelectorAll('button')).toHaveLength(4);
+    const actions = ['review', 'pgn', 'delete', 'favorite'];
+    expect([...footer.children].map((button) => (button as HTMLElement).dataset.historyAction))
+      .toEqual(actions);
+    for (const action of actions) {
+      const button = footer.querySelector(`.btn-${action}`)!;
+      expect(getComputedStyle(button).whiteSpace).toBe('nowrap');
+    }
+    expect(getComputedStyle(footer).display).toBe('flex');
+    expect(getComputedStyle(footer).flexWrap).toBe('nowrap');
+    expect(getComputedStyle(footer).alignItems).toBe('center');
+    expect(getComputedStyle(footer).justifyContent).toBe('space-between');
+    expect(getComputedStyle(footer).width).toBe('100%');
+    expect(getComputedStyle(footer.querySelector('.btn-favorite')!).marginLeft).toBe('auto');
   });
 
   it('disables the solar border animation in tests and for reduced motion', () => {
