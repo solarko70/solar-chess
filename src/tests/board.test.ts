@@ -8,6 +8,40 @@ import { HistoryUI } from '@/ui/history'
 import { getPieceSvg, PIECE_SET_STORAGE_KEY, PIECE_SYMBOLS, setPieceSet } from '@/ui/pieces'
 import type { Color, PieceType } from '@/core'
 
+describe('Stage 13c: hill square overlays', () => {
+  it('highlights only d4, e4, d5 and e5 in King of the Hill through mode changes', () => {
+    const store = new ChessStore()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const board = new ChessBoardUI(container, store)
+    const centers = () => [...container.querySelectorAll<HTMLElement>('.koth-center-square')]
+      .map((square) => Number(square.dataset.square)).sort((a, b) => a - b)
+    try {
+      expect(centers()).toEqual([])
+      store.newGame(undefined, { variant: 'king-of-the-hill' })
+      expect(centers()).toEqual([27, 28, 35, 36])
+      expect(container.querySelectorAll('.koth-center-square .koth-solar-glyph[aria-hidden="true"] svg'))
+        .toHaveLength(4)
+      store.selectSquare(52)
+      expect(centers()).toEqual([27, 28, 35, 36])
+      expect(store.makeMove(52, 36)).toBe(true)
+      expect(container.querySelector('[data-square="36"] .piece-wrapper')).not.toBeNull()
+      store.toggleFlip()
+      expect(centers()).toEqual([27, 28, 35, 36])
+      store.newGame(undefined, { variant: 'three-check' })
+      expect(centers()).toEqual([])
+      store.newGame(undefined, { variant: 'king-of-the-hill' })
+      expect(centers()).toEqual([27, 28, 35, 36])
+      store.newGame(undefined, { variant: 'standard' })
+      expect(centers()).toEqual([])
+      expect(container.querySelector('.koth-solar-glyph')).toBeNull()
+    } finally {
+      board.destroy()
+      container.remove()
+    }
+  })
+})
+
 describe('Right-click board planning', () => {
   let store: ChessStore
   let container: HTMLElement

@@ -724,13 +724,12 @@ export class ChessStore {
       this.flipped = this.playerColor === 'black';
     }
 
-    if (initialState?.variant) {
-      this.variant = initialState.variant;
-    }
+    // Explicit match options take precedence over an imported position's defaults.
+    this.variant = options?.variant ?? initialState?.variant ?? this.variant;
     const baseState = initialState ?? this.ruleSet.getInitialState();
     this.state = {
       ...baseState,
-      variant: baseState.variant ?? this.variant,
+      variant: this.variant,
       checksCount: baseState.checksCount ?? { white: 0, black: 0 },
     };
     this.isGameLoadedFromNotation = initialState !== undefined;

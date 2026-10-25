@@ -89,7 +89,7 @@ export type GameResultType =
 export interface GameResult {
   type: GameResultType;
   status?: 'draw' | 'win';
-  reason?: 'threefold-repetition' | 'king-of-the-hill-center' | 'three-check-limit';
+  reason?: 'threefold-repetition' | 'king-of-the-hill-center' | 'three-check-win';
   winner?: Color; // set for checkmate and variant wins
 
 }

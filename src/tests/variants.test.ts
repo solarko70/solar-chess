@@ -125,6 +125,66 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
     expect(document.getElementById('white-checks-badge')?.textContent).toBe('+2');
     expect(document.getElementById('black-checks-badge')?.textContent).toBe('+1');
   });
+
+  it('renders solar card status, SVG icons and accessible sliding tabs', () => {
+    document.getElementById('btn-play-variants')!.click();
+    const panel = document.getElementById('tab-panel-popular')!;
+    expect(panel.querySelectorAll('.variant-card-top .variant-ready-badge')).toHaveLength(2);
+    expect(panel.querySelectorAll('.variant-card-top .variant-wip-badge')).toHaveLength(7);
+    expect(panel.querySelectorAll('.variant-card-icon svg')).toHaveLength(9);
+    expect(panel.querySelectorAll('.variant-play-btn svg')).toHaveLength(2);
+    expect(panel.querySelector('[data-variant-card="king-of-the-hill"] .variant-card-goal')?.textContent)
+      .toBe('4 клетки до вершины');
+    expect(document.querySelector('.variants-hero .variants-intro')).not.toBeNull();
+    const fairyTab = document.getElementById('tab-btn-fairy')!;
+    fairyTab.click();
+    expect(document.querySelector<HTMLElement>('.variants-tabs')?.style.getPropertyValue('--variant-tab-index'))
+      .toBe('1');
+    expect(fairyTab.getAttribute('aria-controls')).toBe('tab-panel-fairy');
+    expect(fairyTab.tabIndex).toBe(0);
+    fairyTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(document.getElementById('tab-btn-solar')?.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement?.id).toBe('tab-btn-solar');
+    expect(document.getElementById('tab-btn-fairy')?.tabIndex).toBe(-1);
+  });
+
+  it.each([
+    {
+      variant: 'king-of-the-hill', reason: 'king-of-the-hill-center',
+      moves: [[52, 36], [8, 16], [60, 52], [16, 24], [52, 44], [9, 17], [44, 35]],
+    },
+    {
+      variant: 'three-check', reason: 'three-check-win',
+      moves: [[52, 36], [12, 28], [61, 34], [13, 21], [59, 31], [4, 12], [31, 13], [12, 19], [13, 27]],
+    },
+  ] as const)('starts $variant from the modal and ends a game from the opening', ({ variant, reason, moves }) => {
+    document.getElementById('btn-play-variants')!.click();
+    document.querySelector<HTMLButtonElement>(`[data-play-variant="${variant}"]`)!.click();
+    const setup = document.getElementById('variant-setup-modal')!;
+    setup.querySelector<HTMLButtonElement>('[data-opponent="pvp"]')!.click();
+    setup.querySelector<HTMLButtonElement>('#btn-variant-start')!.click();
+    expect(globalStore.getLiveState().variant).toBe(variant);
+    expect(globalStore.getState().variant).toBe(variant);
+    expect(document.querySelectorAll('#board-mount .koth-center-square'))
+      .toHaveLength(variant === 'king-of-the-hill' ? 4 : 0);
+    const clocks = document.getElementById('clock-mount')!;
+    expect(clocks.style.display).not.toBe('none');
+    expect(clocks.querySelector('.clock-panel')).not.toBeNull();
+    expect(clocks.querySelector('.clock-select')).not.toBeNull();
+    for (const [index, [from, to]] of moves.entries()) {
+      expect(globalStore.isGameOver()).toBe(false);
+      expect(globalStore.makeMove(from, to)).toBe(true);
+      expect(globalStore.getLiveState().variant).toBe(variant);
+      if (index < moves.length - 1) expect(globalStore.isGameOver()).toBe(false);
+    }
+    expect(globalStore.getLiveGameResult()).toMatchObject({ winner: 'white', status: 'win', reason });
+    expect(globalStore.isGameOver()).toBe(true);
+    expect(document.getElementById('game-over-reason')?.textContent)
+      .toContain(variant === 'three-check' ? '3 шаха' : 'вершину холма');
+    const finalState = globalStore.getLiveState();
+    expect(globalStore.makeMove(6, 21)).toBe(false);
+    expect(globalStore.getLiveState()).toBe(finalState);
+  });
 });
 
 describe('Stage 13b: VariantSetupModal lifecycle and closing', () => {

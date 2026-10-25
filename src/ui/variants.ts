@@ -390,10 +390,13 @@ export class VariantsUI {
 
   public selectTab(tab: VariantsTabId): void {
     this.activeTab = tab;
+    const tabIndex = (['popular', 'fairy', 'solar'] as const).indexOf(tab);
+    this.container.querySelector<HTMLElement>('.variants-tabs')?.style.setProperty('--variant-tab-index', String(tabIndex));
     this.container.querySelectorAll<HTMLButtonElement>('.variants-tab-btn').forEach((btn) => {
       const isMatch = btn.getAttribute('data-tab') === tab;
       btn.classList.toggle('active', isMatch);
       btn.setAttribute('aria-selected', String(isMatch));
+      btn.tabIndex = isMatch ? 0 : -1;
     });
     this.container.querySelectorAll<HTMLElement>('.variants-tab-panel').forEach((panel) => {
       const isMatch = panel.getAttribute('data-tab-panel') === tab;
@@ -405,20 +408,28 @@ export class VariantsUI {
   private renderCard(card: VariantCardInfo): string {
     const isPlayable = Boolean(card.playableVariant);
     const actionMarkup = isPlayable
-      ? `<button type="button" class="variant-play-btn" data-play-variant="${card.playableVariant}">Играть</button>`
-      : `<span class="variant-wip-badge">В разработке</span>`;
+      ? `<button type="button" class="variant-play-btn" data-play-variant="${card.playableVariant}" aria-label="Играть в ${card.title}"><span>Играть</span>${BACK_ARROW_ICON}</button>`
+      : `<span class="variant-coming-soon">Скоро в каталоге</span>`;
+    const statusMarkup = isPlayable
+      ? '<span class="variant-ready-badge">Доступно</span>'
+      : '<span class="variant-wip-badge">В разработке</span>';
+    const goalMarkup = card.playableVariant === 'king-of-the-hill'
+      ? '4 клетки до вершины'
+      : card.playableVariant === 'three-check' ? '3 шаха до победы' : 'Новые возможности';
 
     return `
       <article class="variant-card ${isPlayable ? 'variant-card-playable' : 'variant-card-wip'}" data-variant-card="${card.id}">
         <div class="variant-card-top">
           <span class="variant-card-icon">${card.iconSvg}</span>
-          <div class="variant-card-titles">
-            <h3 class="variant-card-title">${card.title}</h3>
-            <span class="variant-card-subtitle">${card.subtitle}</span>
-          </div>
+          ${statusMarkup}
+        </div>
+        <div class="variant-card-titles">
+          <h3 class="variant-card-title">${card.title}</h3>
+          <span class="variant-card-subtitle">${card.subtitle}</span>
         </div>
         <p class="variant-card-desc">${card.description}</p>
         <div class="variant-card-footer">
+          <span class="variant-card-goal">${goalMarkup}</span>
           ${actionMarkup}
         </div>
       </article>
@@ -434,31 +445,42 @@ export class VariantsUI {
         <div class="variants-header">
           <button type="button" class="variants-back-btn" id="variants-back">
             ${BACK_ARROW_ICON}
-            <span>← В главное меню</span>
+            <span>В главное меню</span>
           </button>
-          <h2 class="variants-title">Шахматные вариации</h2>
+          <span class="variants-catalog-label">Каталог режимов / Solar Chess</span>
+        </div>
+
+        <div class="variants-hero">
+          <div class="variants-hero-copy">
+            <span class="variants-eyebrow">За пределами классики</span>
+            <h2 class="variants-title">Шахматные вариации</h2>
+            <p class="variants-intro">Займите вершину. Объявите три шаха. Найдите свою орбиту игры.</p>
+            <div class="variants-hero-stats"><span><strong>02</strong> режима доступны</span><span>Одна доска — новые стратегии</span></div>
+          </div>
+          <div class="variants-hero-orbit" aria-hidden="true">${ICON_SOLAR}<span>64</span></div>
         </div>
 
         <div class="variants-tabs" role="tablist" aria-label="Категории шахматных вариаций">
-          <button type="button" class="variants-tab-btn active" role="tab" aria-selected="true" data-tab="popular" id="tab-btn-popular">Популярные</button>
-          <button type="button" class="variants-tab-btn" role="tab" aria-selected="false" data-tab="fairy" id="tab-btn-fairy">Fairy Chess</button>
-          <button type="button" class="variants-tab-btn" role="tab" aria-selected="false" data-tab="solar" id="tab-btn-solar">Фирменный Solar (WIP)</button>
+          <span class="variants-tab-indicator" aria-hidden="true"></span>
+          <button type="button" class="variants-tab-btn active" role="tab" aria-selected="true" aria-controls="tab-panel-popular" data-tab="popular" id="tab-btn-popular">Популярные</button>
+          <button type="button" class="variants-tab-btn" role="tab" aria-selected="false" aria-controls="tab-panel-fairy" tabindex="-1" data-tab="fairy" id="tab-btn-fairy">Fairy Chess</button>
+          <button type="button" class="variants-tab-btn" role="tab" aria-selected="false" aria-controls="tab-panel-solar" tabindex="-1" data-tab="solar" id="tab-btn-solar">Solar Chess</button>
         </div>
 
         <div class="variants-content">
-          <section class="variants-tab-panel active" data-tab-panel="popular" id="tab-panel-popular" role="tabpanel">
+          <section class="variants-tab-panel active" data-tab-panel="popular" id="tab-panel-popular" role="tabpanel" aria-labelledby="tab-btn-popular">
             <div class="variants-grid">
               ${popularGrid}
             </div>
           </section>
 
-          <section class="variants-tab-panel" data-tab-panel="fairy" id="tab-panel-fairy" role="tabpanel" style="display: none;">
+          <section class="variants-tab-panel" data-tab-panel="fairy" id="tab-panel-fairy" role="tabpanel" aria-labelledby="tab-btn-fairy" style="display: none;">
             <div class="variants-grid">
               ${fairyGrid}
             </div>
           </section>
 
-          <section class="variants-tab-panel" data-tab-panel="solar" id="tab-panel-solar" role="tabpanel" style="display: none;">
+          <section class="variants-tab-panel" data-tab-panel="solar" id="tab-panel-solar" role="tabpanel" aria-labelledby="tab-btn-solar" style="display: none;">
             <article class="solar-promo-card" id="solar-promo-card">
               <div class="solar-promo-icon">${ICON_SOLAR}</div>
               <div class="solar-promo-body">
@@ -496,6 +518,17 @@ export class VariantsUI {
         if (tab) {
           this.selectTab(tab);
         }
+      });
+      btn.addEventListener('keydown', (event) => {
+        const tabs: VariantsTabId[] = ['popular', 'fairy', 'solar'];
+        const index = tabs.indexOf(this.activeTab);
+        const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+          : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+            : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null;
+        if (next === null) return;
+        event.preventDefault();
+        this.selectTab(tabs[next]);
+        this.container.querySelector<HTMLButtonElement>(`[data-tab="${tabs[next]}"]`)?.focus();
       });
     });
 

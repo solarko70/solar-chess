@@ -157,7 +157,7 @@ export class ClassicalRuleSet implements RuleSet {
           type: 'threeCheck',
           status: 'win',
           winner: 'white',
-          reason: 'three-check-limit',
+          reason: 'three-check-win',
         };
       }
       if (checks.black >= 3) {
@@ -165,7 +165,7 @@ export class ClassicalRuleSet implements RuleSet {
           type: 'threeCheck',
           status: 'win',
           winner: 'black',
-          reason: 'three-check-limit',
+          reason: 'three-check-win',
         };
       }
     }

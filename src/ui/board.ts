@@ -2,7 +2,7 @@ import { ChessStore, type Premove } from '../state/store'
 import { getPieceSvg, PIECE_SYMBOLS } from './pieces'
 import { getMoveClassMeta, winChance } from '@/analysis'
 import { solarAudio } from '@/audio/solar-audio'
-import { generatePseudoLegal, serializeFEN, type Move, type Piece, type PieceType, type Square } from '@/core'
+import { generatePseudoLegal, KOTH_CENTER_SQUARES, serializeFEN, type Move, type Piece, type PieceType, type Square, type VariantId } from '@/core'
 import type { Score } from '@/ai'
 
 export interface ChessBoardUIOptions {
@@ -148,6 +148,7 @@ export class ChessBoardUI {
 
   // Selective rendering cache to eliminate layout shifts on square selection (Stage 6b-5)
   private lastRenderedFen: string | null = null
+  private lastRenderedVariant: VariantId | undefined
   private lastRenderedFlipped: boolean | null = null
   private lastRenderedSelectedSq: Square | null = null
   private lastRenderedHistoryLen = -1
@@ -490,6 +491,7 @@ export class ChessBoardUI {
     // Check if ONLY selectedSquare changed (same FEN, flipped, history, viewIndex, variations, promo, premoves)
     const isOnlySelectionChange =
       this.lastRenderedFen === currentFen &&
+      this.lastRenderedVariant === state.variant &&
       this.lastRenderedFlipped === currentFlipped &&
       this.lastRenderedHistoryLen === currentHistoryLen &&
       this.lastRenderedViewIndex === currentViewIndex &&
@@ -669,6 +671,16 @@ export class ChessBoardUI {
         sqEl.className = `chess-square ${isLight ? 'light' : 'dark'}`
         sqEl.dataset.square = sq.toString()
 
+        if (state.variant === 'king-of-the-hill' && width === 8 && height === 8 &&
+          KOTH_CENTER_SQUARES.some((center) => center === sq)) {
+          sqEl.classList.add('koth-center-square')
+          const glyph = document.createElement('span')
+          glyph.className = 'koth-solar-glyph'
+          glyph.setAttribute('aria-hidden', 'true')
+          glyph.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 7 4 4 4-7 4 7 4-4-2 11H6L4 7Z"/><path d="M7 21h10"/></svg>'
+          sqEl.appendChild(glyph)
+        }
+
         if (isSelected) sqEl.classList.add('selected', 'selected-square', 'square-selected')
         if (isLastMove) sqEl.classList.add('last-move')
         if (isKingInCheck) sqEl.classList.add('in-check')
@@ -741,6 +753,7 @@ export class ChessBoardUI {
     if (shock && kingSq !== null) this.animateKingShock(kingSq)
 
     this.lastRenderedFen = serializeFEN(state)
+    this.lastRenderedVariant = state.variant
     this.lastRenderedFlipped = flipped
     this.lastRenderedSelectedSq = selectedSq
     this.lastRenderedHistoryLen = historyLen

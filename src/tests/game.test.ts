@@ -165,8 +165,140 @@ describe('King of the Hill & Three-Check rules (Stage 13a)', () => {
       type: 'threeCheck',
       status: 'win',
       winner: 'white',
-      reason: 'three-check-limit',
+      reason: 'three-check-win',
     });
     expect(store.isGameOver()).toBe(true);
+  });
+});
+
+describe('Stage 13c: terminal variant wins', () => {
+  it.each(['king-of-the-hill', 'three-check'] as const)('preserves %s in fresh games and rematches', (variant) => {
+    const store = new ChessStore();
+    store.newGame(undefined, { variant });
+    expect(store.getLiveState().variant).toBe(variant);
+    expect(store.makeMove(52, 36)).toBe(true);
+    expect(store.getLiveState().variant).toBe(variant);
+    expect(store.getStateAtPly(0).variant).toBe(variant);
+    store.newGame();
+    expect(store.getLiveState().variant).toBe(variant);
+    expect(store.getChecksCount()).toEqual({ white: 0, black: 0 });
+    store.newGame(undefined, { variant: 'standard' });
+    expect(store.getVariant()).toBe('standard');
+    expect(store.getLiveState().variant).toBe('standard');
+  });
+
+  it('prioritizes match options over a FEN default and adopts imported variants otherwise', () => {
+    const store = new ChessStore();
+    const initial = parseFEN('4k3/8/8/8/8/8/4Q3/K7 w - - 0 1');
+    store.newGame(initial, { variant: 'three-check' });
+    expect(store.getVariant()).toBe('three-check');
+    expect(store.getLiveState().variant).toBe('three-check');
+    expect(initial.variant).toBe('standard');
+    store.newGame({ ...initial, variant: 'king-of-the-hill' });
+    expect(store.getVariant()).toBe('king-of-the-hill');
+    expect(store.getLiveState().variant).toBe('king-of-the-hill');
+  });
+
+  it.each([
+    { winner: 'white', fen: '4k3/8/8/8/8/8/4Q3/K7 w - - 0 1', moves: [[52, 25], [4, 3], [25, 17], [3, 4], [17, 20]] },
+    { winner: 'black', fen: '7k/3q4/8/8/8/8/8/3K4 b - - 0 1', moves: [[11, 38], [59, 60], [38, 46], [60, 59], [46, 43]] },
+  ] as const)('ends on the third check by $winner with one sound and a modal', ({ winner, fen, moves }) => {
+    const store = new ChessStore();
+    store.setClockMode('blitz-3-2');
+    store.newGame(parseFEN(fen), { variant: 'three-check' });
+    const boardMount = document.createElement('div');
+    const modalMount = document.createElement('div');
+    document.body.append(boardMount, modalMount);
+    const board = new ChessBoardUI(boardMount, store);
+    const modal = new GameOverModalUI(modalMount, store);
+    const end = vi.spyOn(solarAudio, 'playGameEnd').mockImplementation(() => {});
+    try {
+      for (const [index, [from, to]] of moves.entries()) {
+        expect(store.makeMove(from, to)).toBe(true);
+        expect(store.getChecksCount()[winner]).toBe(Math.floor(index / 2) + 1);
+        if (index < moves.length - 1) {
+          expect(store.isGameOver()).toBe(false);
+          expect(modal.isOpen()).toBe(false);
+          expect(end).not.toHaveBeenCalled();
+        }
+      }
+      expect(store.getLiveGameResult()).toEqual({
+        type: 'threeCheck', status: 'win', winner, reason: 'three-check-win',
+      });
+      expect(store.isGameOver()).toBe(true);
+      expect(store.isClockActive()).toBe(false);
+      expect(modal.isOpen()).toBe(true);
+      expect(modalMount.querySelector('#game-over-reason')?.textContent).toBe('Победа: объявлено 3 шаха');
+      expect(end.mock.calls).toEqual([[winner === 'white' ? 'win' : 'loss']]);
+      const terminalState = store.getLiveState();
+      const reply = winner === 'white' ? [4, 3] : [59, 60];
+      expect(store.makeMove(reply[0], reply[1])).toBe(false);
+      expect(store.getLiveState()).toBe(terminalState);
+      expect(store.getChecksCount()[winner]).toBe(3);
+      expect(store.undo()).toBe(false);
+      store.selectSquare(null);
+      expect(end).toHaveBeenCalledOnce();
+    } finally {
+      modal.destroy();
+      board.destroy();
+    }
+  });
+
+  it.each([
+    { square: 'd4', fen: '7k/8/8/8/8/3K4/8/8 w - - 0 1', from: 43, to: 35 },
+    { square: 'e4', fen: '7k/8/8/8/8/4K3/8/8 w - - 0 1', from: 44, to: 36 },
+    { square: 'd5', fen: '7k/8/8/2K5/8/8/8/8 w - - 0 1', from: 26, to: 27 },
+    { square: 'e5', fen: '8/8/3k4/8/8/8/8/7K b - - 0 1', from: 19, to: 28 },
+  ])('ends immediately on $square with a modal, sound and no further moves', ({ fen, from, to }) => {
+    const store = new ChessStore();
+    store.setClockMode('blitz-3-2');
+    const initial = parseFEN(fen);
+    store.newGame(initial, { variant: 'king-of-the-hill' });
+    const boardMount = document.createElement('div');
+    const modalMount = document.createElement('div');
+    document.body.append(boardMount, modalMount);
+    const board = new ChessBoardUI(boardMount, store);
+    const modal = new GameOverModalUI(modalMount, store);
+    const end = vi.spyOn(solarAudio, 'playGameEnd').mockImplementation(() => {});
+    try {
+      expect(store.isGameOver()).toBe(false);
+      expect(store.makeMove(from, to)).toBe(true);
+      expect(store.getLiveGameResult()).toEqual({
+        type: 'kingOfTheHill', status: 'win', winner: initial.turn, reason: 'king-of-the-hill-center',
+      });
+      expect(store.isClockActive()).toBe(false);
+      expect(modal.isOpen()).toBe(true);
+      expect(modalMount.querySelector('#game-over-reason')?.textContent)
+        .toBe('Победа: Король занял вершину холма');
+      expect(end.mock.calls).toEqual([[initial.turn === 'white' ? 'win' : 'loss']]);
+      const terminalState = store.getLiveState();
+      const replyFrom = initial.turn === 'white' ? 7 : 63;
+      expect(store.makeMove(replyFrom, replyFrom - 1)).toBe(false);
+      expect(store.getLiveState()).toBe(terminalState);
+      expect(store.undo()).toBe(false);
+      store.selectSquare(null);
+      expect(end).toHaveBeenCalledOnce();
+    } finally {
+      modal.destroy();
+      board.destroy();
+    }
+  });
+
+  it('keeps kings out of attacked hill squares', () => {
+    const store = new ChessStore();
+    store.newGame(parseFEN('4r2k/8/8/8/8/4K3/8/8 w - - 0 1'), { variant: 'king-of-the-hill' });
+    expect(store.makeMove(44, 36)).toBe(false);
+    expect(store.isGameOver()).toBe(false);
+  });
+
+  it('keeps standard play ongoing after three checks', () => {
+    const store = new ChessStore();
+    store.newGame(parseFEN('4k3/8/8/8/8/8/4Q3/K7 w - - 0 1'), { variant: 'standard' });
+    for (const [from, to] of [[52, 25], [4, 3], [25, 17], [3, 4], [17, 20]]) {
+      expect(store.makeMove(from, to)).toBe(true);
+    }
+    expect(store.getChecksCount().white).toBe(3);
+    expect(store.isGameOver()).toBe(false);
+    expect(store.makeMove(4, 3)).toBe(true);
   });
 });

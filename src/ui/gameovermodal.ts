@@ -658,20 +658,18 @@ export class GameOverModalUI {
         reason = 'Король белых атакован и не имеет защиты';
       }
     } else if (result.type === 'kingOfTheHill') {
+      reason = 'Победа: Король занял вершину холма';
       if (result.winner === 'white') {
         title = 'Царь горы. Победили белые';
-        reason = 'Белый король занял центральную клетку';
       } else {
         title = 'Царь горы. Победили чёрные';
-        reason = 'Чёрный король занял центральную клетку';
       }
     } else if (result.type === 'threeCheck') {
+      reason = 'Победа: объявлено 3 шаха';
       if (result.winner === 'white') {
         title = 'Три шаха. Победили белые';
-        reason = 'Белые объявили третий шах королю чёрных';
       } else {
         title = 'Три шаха. Победили чёрные';
-        reason = 'Чёрные объявили третий шах королю белых';
       }
     } else if (result.type === 'stalemate') {
       title = 'Ничья: пат';

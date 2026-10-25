@@ -60,6 +60,7 @@ export const translations: Record<string, string> = {
   'history.threeCheck': 'Три шаха',
   'history.king-of-the-hill-center': 'Царь горы',
   'history.three-check-limit': 'Три шаха',
+  'history.three-check-win': 'Три шаха',
 };
 
 export function t(key: string): string {
