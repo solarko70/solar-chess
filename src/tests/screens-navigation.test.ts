@@ -5,6 +5,7 @@ import { initApp, getRouter } from '@/main';
 import { globalStore } from '@/state/store';
 import { APP_NAME, APP_TITLE } from '@/config';
 import { t } from '@/i18n';
+import { COLOR_THEME_STORAGE_KEY } from '@/ui/settings';
 
 describe('Screens & Navigation (Stage A1)', () => {
   beforeEach(() => {
@@ -249,12 +250,14 @@ describe('Screens & Navigation (Stage A1)', () => {
     const themeBtn = document.getElementById('theme-btn');
     expect(themeBtn).not.toBeNull();
     expect(themeBtn?.classList.contains('theme-toggle-btn')).toBe(true);
+    // Stage 12b: theme toggle moved into the home dropdown; the top-right slot belongs to #sound-btn
+    expect(themeBtn?.closest('#main-menu-dropdown')).not.toBeNull();
 
     const cssPath = path.resolve(__dirname, '../ui/styles.css');
     const css = fs.readFileSync(cssPath, 'utf-8');
-    expect(css).toMatch(/\.theme-toggle-btn\s*\{[^}]*position:\s*fixed;/);
-    expect(css).toMatch(/\.theme-toggle-btn\s*\{[^}]*top:\s*16px;/);
-    expect(css).toMatch(/\.theme-toggle-btn\s*\{[^}]*right:\s*16px;/);
+    expect(css).toMatch(/\.sound-toggle-btn\s*\{[^}]*position:\s*fixed;/);
+    expect(css).toMatch(/\.sound-toggle-btn\s*\{[^}]*top:\s*16px;/);
+    expect(css).toMatch(/\.sound-toggle-btn\s*\{[^}]*right:\s*16px;/);
   });
 
   it('prefers-reduced-motion media query disables animations in styles.css', () => {
@@ -433,3 +436,112 @@ describe('Screens & Navigation (Stage A1)', () => {
   });
 });
 
+
+describe('Home dropdown menu and top-right sound control (Stage 12b)', () => {
+  beforeEach(() => {
+    window.location.hash = '#/';
+    document.body.innerHTML = '<div id="app"></div>';
+    globalStore.newGame(undefined, { mode: 'pvp' });
+    initApp();
+  });
+
+  afterEach(() => {
+    getRouter()?.destroy();
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('home shows the dropdown trigger that opens #main-menu-dropdown on click', () => {
+    const corner = document.getElementById('main-nav-corner')!;
+    const trigger = document.getElementById('main-menu-trigger')!;
+    expect(corner.style.display).not.toBe('none');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(trigger.querySelector('svg.main-menu-chevron')?.getAttribute('aria-hidden')).toBe('true');
+    trigger.click();
+    expect(corner.classList.contains('open')).toBe(true);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(document.getElementById('main-menu-dropdown')?.getAttribute('role')).toBe('menu');
+  });
+
+  it('dropdown contains settings, theme, history and soon-badged variants items', () => {
+    const dropdown = document.getElementById('main-menu-dropdown')!;
+    expect(dropdown.querySelector('#menu-settings-item #settings-btn')).not.toBeNull();
+    expect(dropdown.querySelector('#menu-history-item #history-btn')).not.toBeNull();
+    expect(dropdown.querySelector('#theme-btn')).not.toBeNull();
+    const variants = dropdown.querySelector<HTMLButtonElement>('#menu-variants-item button')!;
+    expect(variants.disabled).toBe(true);
+    expect(variants.querySelector('.main-menu-badge')?.textContent).toBe(t('common.soon'));
+    expect(dropdown.textContent).not.toMatch(/[\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}]/u);
+  });
+
+  it('theme item toggles theme, updates its label and persists the choice', () => {
+    const themeBtn = document.getElementById('theme-btn')!;
+    expect(themeBtn.querySelector('[data-theme-value]')?.textContent).toBe('Тёмная');
+    themeBtn.click();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(themeBtn.querySelector('[data-theme-value]')?.textContent).toBe('Светлая');
+    expect(themeBtn.getAttribute('aria-label')).toBe(t('common.themeToggleLight'));
+    expect(localStorage.getItem(COLOR_THEME_STORAGE_KEY)).toBe('light');
+    themeBtn.click();
+    expect(themeBtn.querySelector('[data-theme-value]')?.textContent).toBe('Тёмная');
+  });
+
+  it('closes the dropdown on outside click and on Escape', () => {
+    const corner = document.getElementById('main-nav-corner')!;
+    document.getElementById('main-menu-trigger')!.click();
+    document.body.click();
+    expect(corner.classList.contains('open')).toBe(false);
+    document.getElementById('main-menu-trigger')!.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(corner.classList.contains('open')).toBe(false);
+  });
+
+  it('hover opens the dropdown and mouseleave closes it after a 220ms grace timer', () => {
+    vi.useFakeTimers();
+    const corner = document.getElementById('main-nav-corner')!;
+    corner.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(corner.classList.contains('open')).toBe(true);
+    corner.dispatchEvent(new MouseEvent('mouseleave'));
+    vi.advanceTimersByTime(200);
+    expect(corner.classList.contains('open')).toBe(true);
+    vi.advanceTimersByTime(30);
+    expect(corner.classList.contains('open')).toBe(false);
+  });
+
+  it('only #sound-btn remains as a fixed control in the top-right corner', () => {
+    const fixedTopRight = ['#sound-btn', '#theme-btn', '#settings-btn', '#history-btn']
+      .map((sel) => document.querySelector(sel)!)
+      .filter((el) => !el.closest('#main-nav-corner'));
+    expect(fixedTopRight.map((el) => el.id)).toEqual(['sound-btn']);
+    const css = fs.readFileSync(path.resolve(__dirname, '../ui/styles.css'), 'utf-8');
+    expect(css).not.toMatch(/\.settings-toggle-btn\s*\{[^}]*position:\s*fixed;/);
+    expect(css).toMatch(/\.main-nav-corner\s*\{[^}]*top:\s*1\.25rem;[^}]*left:\s*1\.25rem;[^}]*z-index:\s*var\(--z-modal\);/);
+    expect(css).toMatch(/\.main-menu-dropdown\s*\{[^}]*top:\s*calc\(100% \+ 8px\);[^}]*min-width:\s*220px;/);
+  });
+
+  it('game screen hides the dropdown corner while the sound button stays usable', () => {
+    document.getElementById('main-menu-trigger')!.click();
+    getRouter()?.navigate('game');
+    const corner = document.getElementById('main-nav-corner')!;
+    expect(corner.style.display).toBe('none');
+    expect(corner.classList.contains('open')).toBe(false);
+    const soundBtn = document.getElementById('sound-btn')!;
+    expect(soundBtn.closest('#main-nav-corner')).toBeNull();
+    const wasMuted = soundBtn.classList.contains('muted');
+    soundBtn.click();
+    expect(soundBtn.classList.contains('muted')).toBe(!wasMuted);
+    soundBtn.click();
+    expect(document.getElementById('clock-mount')?.style.display).not.toBe('none');
+  });
+
+  it('dropdown corner is hidden on analysis, history and settings screens', () => {
+    for (const route of ['analysis', 'history', 'settings'] as const) {
+      getRouter()?.navigate(route);
+      expect(document.getElementById('main-nav-corner')?.style.display).toBe('none');
+      expect(document.getElementById('sound-btn')).not.toBeNull();
+    }
+    getRouter()?.navigate('home');
+    expect(document.getElementById('main-nav-corner')?.style.display).not.toBe('none');
+  });
+});

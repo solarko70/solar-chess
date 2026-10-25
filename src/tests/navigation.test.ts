@@ -179,3 +179,49 @@ describe('Settings navigation', () => {
     expect(document.querySelector('.archive-accuracy')?.textContent).toContain('96.0%')
   })
 })
+
+describe('Home dropdown navigation (Stage 12b)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    solarAudio.setMuted(false)
+    window.location.hash = '#/'
+    document.body.innerHTML = '<div id="app"></div>'
+    globalStore.newGame(undefined, { mode: 'pvp' })
+    initApp()
+  })
+
+  afterEach(() => {
+    getRouter()?.destroy()
+    document.body.innerHTML = ''
+    document.documentElement.removeAttribute('data-theme')
+    solarAudio.setMuted(false)
+    localStorage.clear()
+  })
+
+  it('opens settings from the dropdown and closes the menu on navigation', () => {
+    document.getElementById('main-menu-trigger')!.click()
+    expect(document.getElementById('main-nav-corner')?.classList.contains('open')).toBe(true)
+    document.querySelector<HTMLButtonElement>('#main-menu-dropdown #settings-btn')!.click()
+    expect(window.location.hash).toBe('#/settings')
+    expect(document.getElementById('main-nav-corner')?.classList.contains('open')).toBe(false)
+    expect(document.getElementById('main-nav-corner')?.style.display).toBe('none')
+  })
+
+  it('opens the archive from the dropdown history item', () => {
+    document.getElementById('main-menu-trigger')!.click()
+    document.querySelector<HTMLButtonElement>('#menu-history-item #history-btn')!.click()
+    expect(window.location.hash).toBe('#/history')
+    expect(document.getElementById('screen-history')?.style.display).toBe('flex')
+  })
+
+  it('keeps the sound toggle outside the dropdown and working on the game screen', () => {
+    getRouter()?.navigate('game')
+    const soundBtn = document.getElementById('sound-btn')!
+    expect(soundBtn.closest('#main-nav-corner')).toBeNull()
+    soundBtn.click()
+    expect(solarAudio.isMuted()).toBe(true)
+    expect(soundBtn.classList.contains('muted')).toBe(true)
+    soundBtn.click()
+    expect(solarAudio.isMuted()).toBe(false)
+  })
+})

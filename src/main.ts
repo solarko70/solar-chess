@@ -21,7 +21,15 @@ import { AnalysisBoardUI, mountAnalysisBoard } from './ui/analysis-board';
 import { LEVELS } from './ai';
 import { getPieceSvg } from './ui/pieces';
 import { buildGameScene, buildReviewScene } from './ui/space-scenes';
-import { buildSolarLogo, buildSettingsButton, buildHistoryButton, disposeSaturnBackground, updateSaturnBackground } from './ui/navigation';
+import {
+  buildSolarLogo,
+  buildMainMenu,
+  mountMainMenu,
+  syncThemeMenuItem,
+  updateMainMenuVisibility,
+  disposeSaturnBackground,
+  updateSaturnBackground,
+} from './ui/navigation';
 import { SettingsUI, applyColorTheme, getColorTheme, restoreColorTheme } from './ui/settings';
 import { ClockWidget } from './ui/clockwidget';
 import type { Color } from './core';
@@ -163,16 +171,11 @@ export function initApp(): void {
   restoreColorTheme();
 
   app.innerHTML = `
-    ${buildSettingsButton()}
-    ${buildHistoryButton()}
-    <!-- Fixed Sound Mute Toggle in top-right corner of viewport (left of Theme Toggle) -->
+    <!-- Home-only dropdown (archive, settings, theme) in the top-left corner -->
+    ${buildMainMenu(MOON_ICON)}
+    <!-- Fixed Sound Mute Toggle: the only control in the top-right corner on every screen -->
     <button class="sound-toggle-btn" id="sound-btn" aria-label="Звук: включен" title="Звук: включен">
       ${SOUND_ON_ICON}
-    </button>
-
-    <!-- Fixed Theme Toggle in top-right corner of viewport -->
-    <button class="theme-toggle-btn" id="theme-btn" aria-label="${t('common.themeToggleDark')}" title="${t('common.themeToggleDark')}">
-      ${MOON_ICON}
     </button>
 
     <!-- Fullscreen Solar Chess background -->
@@ -456,6 +459,7 @@ export function initApp(): void {
     document.body.classList.toggle('settings-active', route === 'settings');
     document.body.classList.toggle('history-active', route === 'history');
     updateSaturnBackground(route, app);
+    updateMainMenuVisibility(route);
 
     if (isHome) {
       startMenuAmbient();
@@ -1033,23 +1037,14 @@ export function initApp(): void {
   });
 
   const updateThemeUI = (): void => {
-    const themeBtn = document.getElementById('theme-btn');
     const isDark = getColorTheme() === 'dark';
     if (isDark) {
       document.documentElement.removeAttribute('data-theme');
-      if (themeBtn) {
-        themeBtn.innerHTML = MOON_ICON;
-        themeBtn.setAttribute('title', t('common.themeToggleDark'));
-        themeBtn.setAttribute('aria-label', t('common.themeToggleDark'));
-      }
     } else {
       document.documentElement.setAttribute('data-theme', 'light');
-      if (themeBtn) {
-        themeBtn.innerHTML = SUN_ICON;
-        themeBtn.setAttribute('title', t('common.themeToggleLight'));
-        themeBtn.setAttribute('aria-label', t('common.themeToggleLight'));
-      }
     }
+    // Theme toggle lives inside the home dropdown: refresh its icon and value label
+    syncThemeMenuItem(isDark, isDark ? MOON_ICON : SUN_ICON);
   };
   updateThemeUI();
 
@@ -1157,6 +1152,8 @@ export function initApp(): void {
     onThemeChange: updateThemeUI,
     onSoundChange: updateSoundUI,
   });
+  mountMainMenu();
+  updateMainMenuVisibility(currentRouter?.getRoute() ?? 'home');
   document.getElementById('settings-btn')?.addEventListener('click', () => {
     currentRouter?.navigate('settings');
   });

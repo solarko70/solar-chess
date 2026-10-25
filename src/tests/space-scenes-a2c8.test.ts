@@ -238,7 +238,8 @@ describe('Stage A2c-8: Sparkles, review galaxy, board frame, review spacing, and
     const css = fs.readFileSync(cssPath, 'utf8');
 
     const closeBtnMatch = css.match(/\.btn-close-review-overlay\s*\{([^}]*)\}/);
-    const themeReviewMatch = css.match(/body\.review-active\s+\.theme-toggle-btn\s*\{([^}]*)\}/);
+    // Stage 12b: the sound toggle is the only top-right control left during review
+    const themeReviewMatch = css.match(/body\.review-active\s+\.sound-toggle-btn\s*\{([^}]*)\}/);
     expect(closeBtnMatch).not.toBeNull();
     expect(themeReviewMatch).not.toBeNull();
 

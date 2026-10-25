@@ -6051,9 +6051,8 @@ body.review-active .review-overlay-side-col .history-nav {
   }
 }
 
-/* Fixed Sound Toggle and Theme Toggle in top-right corner */
-.sound-toggle-btn,
-.theme-toggle-btn {
+/* Fixed Sound Toggle: the only control in the top-right corner on every screen */
+.sound-toggle-btn {
   position: fixed;
   top: 16px;
   z-index: var(--z-modal);
@@ -6078,34 +6077,23 @@ body.review-active .review-overlay-side-col .history-nav {
     color 0.15s ease;
 }
 
-.theme-toggle-btn {
+.sound-toggle-btn {
   right: 16px;
 }
 
-.sound-toggle-btn {
-  right: 64px;
-}
-
-/* In Review Overlay, shift theme toggle (68px) and sound toggle (116px) left of close button */
-body.review-active .theme-toggle-btn {
+/* In Review Overlay, shift sound toggle (68px) left of close button */
+body.review-active .sound-toggle-btn {
   top: 16px;
   right: 68px;
 }
 
-body.review-active .sound-toggle-btn {
-  top: 16px;
-  right: 116px;
-}
-
-.sound-toggle-btn:hover,
-.theme-toggle-btn:hover {
+.sound-toggle-btn:hover {
   background: var(--bg-tertiary);
   border-color: var(--accent);
   transform: scale(1.05);
 }
 
-.sound-toggle-btn:active,
-.theme-toggle-btn:active {
+.sound-toggle-btn:active {
   transform: scale(0.95);
 }
 
@@ -6118,41 +6106,173 @@ body.review-active .sound-toggle-btn {
   opacity: 1;
 }
 
-.sound-toggle-btn:focus-visible,
-.theme-toggle-btn:focus-visible {
+.sound-toggle-btn:focus-visible {
   outline: 2px solid var(--solar-accent);
   outline-offset: 2px;
 }
 
-.sound-toggle-btn svg,
-.theme-toggle-btn svg {
+.sound-toggle-btn svg {
   display: block;
   width: 20px;
   height: 20px;
 }
 
-/* Settings share the application palette and remain readable without motion. */
-.settings-toggle-btn {
+/* Home-only dropdown menu in the top-left corner (archive, settings, theme). */
+.main-nav-corner {
   position: fixed;
-  top: 16px;
-  right: 112px;
+  top: 1.25rem;
+  left: 1.25rem;
+  /* --z-modal resolves to 100; numeric z-index values above 10 are banned project-wide */
   z-index: var(--z-modal);
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--bg-tertiary);
-  border-radius: 50%;
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  cursor: pointer;
 }
 
-body.review-active .settings-toggle-btn { right: 164px; }
-.settings-toggle-btn svg { width: 21px; height: 21px; }
-.settings-toggle-btn:hover { border-color: var(--solar-gold); }
+body:not(.home-active) .main-nav-corner {
+  display: none;
+}
 
+.main-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px 0 16px;
+  border: 1px solid var(--solar-gold);
+  border-radius: 999px;
+  color: #e2e8f0;
+  background: #0f172a;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition:
+    transform 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.main-menu-trigger:hover {
+  color: var(--solar-gold);
+}
+
+.main-menu-trigger:active {
+  transform: scale(0.97);
+}
+
+.main-menu-trigger:focus-visible,
+.main-menu-dropdown .main-menu-item:focus-visible {
+  outline: 2px solid var(--solar-gold);
+  outline-offset: 2px;
+}
+
+.main-menu-chevron {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transform: rotate(0deg);
+  transition: transform 0.14s ease;
+}
+
+.main-nav-corner.open .main-menu-chevron {
+  transform: rotate(180deg);
+}
+
+.main-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 220px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid var(--solar-gold);
+  border-radius: 14px;
+  background: #0f172a;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease,
+    visibility 0s linear 0.14s;
+  will-change: transform, opacity;
+}
+
+.main-nav-corner.open .main-menu-dropdown {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease,
+    visibility 0s linear 0s;
+}
+
+.main-menu-dropdown .main-menu-item {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: auto;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  color: #e2e8f0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+.main-menu-dropdown .main-menu-item:hover:not(:disabled) {
+  color: var(--solar-gold);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.main-menu-dropdown .main-menu-item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.main-menu-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--solar-gold);
+}
+
+.main-menu-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.main-menu-label {
+  flex: 1;
+}
+
+.main-menu-value {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.main-menu-badge {
+  padding: 2px 7px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 0.7rem;
+}
+
+/* Reduced-motion overrides for the dropdown live in the shared block near the end of the file */
+
+/* Settings share the application palette and remain readable without motion. */
 body.settings-active {
   align-items: flex-start;
   padding: 0;
@@ -6205,7 +6325,7 @@ body.settings-active #app { max-width: none; }
 .settings-piece-preview { display: flex; gap: 8px; width: 104px; height: 48px; }
 .settings-piece-preview svg { width: 48px; height: 48px; flex-shrink: 0; }
 .settings-soon { display: inline-block; width: fit-content; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--bg-tertiary); color: var(--text-secondary); font-size: 0.7rem; }
-.settings-center button:focus-visible, .settings-back:focus-visible, .settings-toggle-btn:focus-visible { outline: 2px solid var(--solar-gold); outline-offset: 4px; }
+.settings-center button:focus-visible, .settings-back:focus-visible { outline: 2px solid var(--solar-gold); outline-offset: 4px; }
 
 @media (max-width: 540px) {
   .screen-settings { padding: 72px 12px 24px; }
@@ -6215,8 +6335,6 @@ body.settings-active #app { max-width: none; }
 }
 
 /* Local game archive uses static surfaces and the shared application palette. */
-.history-toggle-btn { right: 160px; }
-body.review-active .history-toggle-btn { right: 212px; }
 body.history-active { align-items: flex-start; padding: 0; background: var(--bg-primary); }
 body.history-active #app { max-width: none; }
 .screen-history { min-height: 100vh; padding: 76px 20px 48px; transition: none; background: radial-gradient(ellipse at 80% 0%, var(--solar-glow), transparent 50%); }
@@ -7611,6 +7729,14 @@ body:has(#screen-analysis.active) #app {
   }
   .home-title-wrapper {
     transform: translate(-50%, -50%) !important;
+  }
+  /* Home dropdown switches instantly: no fade, slide or chevron rotation animation */
+  .main-menu-trigger,
+  .main-menu-chevron,
+  .main-menu-dropdown,
+  .main-nav-corner.open .main-menu-dropdown,
+  .main-menu-dropdown .main-menu-item {
+    transition: none !important;
   }
 }
 
