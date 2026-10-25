@@ -6055,6 +6055,7 @@ body.review-active .review-overlay-side-col .history-nav {
 .sound-toggle-btn {
   position: fixed;
   top: 16px;
+  right: 16px;
   z-index: var(--z-modal);
   background: var(--bg-secondary);
   border: 1px solid var(--bg-tertiary);
@@ -6075,10 +6076,6 @@ body.review-active .review-overlay-side-col .history-nav {
     right 0.15s ease,
     opacity 0.15s ease,
     color 0.15s ease;
-}
-
-.sound-toggle-btn {
-  right: 16px;
 }
 
 /* In Review Overlay, shift sound toggle (68px) left of close button */
@@ -6131,15 +6128,16 @@ body:not(.home-active) .main-nav-corner {
 }
 
 .main-menu-trigger {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   height: 40px;
   padding: 0 14px 0 16px;
-  border: 1px solid var(--solar-gold);
+  border: 1px solid transparent;
   border-radius: 999px;
   color: #e2e8f0;
-  background: #0f172a;
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -6185,10 +6183,10 @@ body:not(.home-active) .main-nav-corner {
   margin: 0;
   padding: 6px;
   list-style: none;
-  border: 1px solid var(--solar-gold);
+  border: 1px solid transparent;
   border-radius: 14px;
-  background: #0f172a;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  isolation: isolate;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.7), 0 0 15px 1px rgba(245, 158, 11, 0.25);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -6198,6 +6196,49 @@ body:not(.home-active) .main-nav-corner {
     transform 0.14s ease,
     visibility 0s linear 0.14s;
   will-change: transform, opacity;
+}
+
+/* Two clipped backgrounds keep the moving plasma inside a one-pixel contour. */
+.main-menu-trigger,
+.main-menu-dropdown {
+  background:
+    linear-gradient(#0b1120, #0b1120) padding-box,
+    linear-gradient(90deg, #f59e0b 0%, #d97706 24%, #ffffff 48%, #ea580c 72%, #f59e0b 100%) border-box;
+  background-size: 100% 100%, 200% 100%;
+  background-position: 0 0, 0% center;
+}
+
+/* Empty pseudo-elements have no accessible content and never intercept input. */
+.main-menu-trigger::after,
+.main-menu-dropdown::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 18px 2px rgba(245, 158, 11, 0.3);
+  opacity: 0;
+}
+
+.main-nav-corner.open .main-menu-trigger,
+.main-nav-corner.open .main-menu-dropdown {
+  animation: solar-photon-flow 3.6s linear infinite;
+}
+
+.main-nav-corner.open .main-menu-trigger::after,
+.main-nav-corner.open .main-menu-dropdown::after {
+  opacity: 0.6;
+  animation: solar-aura-pulse 3.6s ease-in-out infinite;
+}
+
+@keyframes solar-photon-flow {
+  from { background-position: 0 0, 0% center; }
+  to { background-position: 0 0, 200% center; }
+}
+
+@keyframes solar-aura-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.8; }
 }
 
 .main-nav-corner.open .main-menu-dropdown {
@@ -6232,7 +6273,6 @@ body:not(.home-active) .main-nav-corner {
 }
 
 .main-menu-dropdown .main-menu-item:hover:not(:disabled) {
-  color: var(--solar-gold);
   background: rgba(148, 163, 184, 0.12);
 }
 
@@ -6245,6 +6285,12 @@ body:not(.home-active) .main-nav-corner {
   display: inline-flex;
   flex-shrink: 0;
   color: var(--solar-gold);
+  transition: filter 0.2s ease, color 0.2s ease;
+}
+
+.main-menu-item:is(:hover, :focus-visible):not(:disabled):not([aria-disabled='true']) .main-menu-icon {
+  color: #fbbf24;
+  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
 }
 
 .main-menu-icon svg {
@@ -6255,6 +6301,30 @@ body:not(.home-active) .main-nav-corner {
 
 .main-menu-label {
   flex: 1;
+  display: inline-block;
+  color: #e2e8f0;
+  transition: color 0.2s ease;
+}
+
+/* Opaque text fades away to reveal the clipped gradient, with no duplicate label. */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .main-menu-item:not(:disabled):not([aria-disabled='true']) .menu-item-label {
+    background: linear-gradient(90deg, #ffffff 0%, #fef08a 25%, #f59e0b 60%, #ffffff 100%);
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: currentColor;
+  }
+
+  .main-nav-corner.open .main-menu-item:is(:hover, :focus-visible):not(:disabled):not([aria-disabled='true']) .menu-item-label {
+    color: transparent;
+    animation: solar-text-shimmer 2.4s linear infinite;
+  }
+}
+
+@keyframes solar-text-shimmer {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
 }
 
 .main-menu-value {
@@ -6270,7 +6340,18 @@ body:not(.home-active) .main-nav-corner {
   font-size: 0.7rem;
 }
 
-/* Reduced-motion overrides for the dropdown live in the shared block near the end of the file */
+/* Test environments switch instantly, including the delayed visibility change. */
+.main-nav-corner[data-instant-motion='true'] .main-menu-trigger,
+.main-nav-corner[data-instant-motion='true'] .main-menu-chevron,
+.main-nav-corner[data-instant-motion='true'] .main-menu-dropdown,
+.main-nav-corner[data-instant-motion='true'] .main-menu-item,
+.main-nav-corner[data-instant-motion='true'] .menu-item-label,
+.main-nav-corner[data-instant-motion='true'] .main-menu-icon,
+.main-nav-corner[data-instant-motion='true'] .main-menu-trigger::after,
+.main-nav-corner[data-instant-motion='true'] .main-menu-dropdown::after {
+  animation: none !important;
+  transition: none !important;
+}
 
 /* Settings share the application palette and remain readable without motion. */
 body.settings-active {
@@ -7735,7 +7816,12 @@ body:has(#screen-analysis.active) #app {
   .main-menu-chevron,
   .main-menu-dropdown,
   .main-nav-corner.open .main-menu-dropdown,
-  .main-menu-dropdown .main-menu-item {
+  .main-menu-dropdown .main-menu-item,
+  .main-menu-dropdown .menu-item-label,
+  .main-menu-dropdown .main-menu-icon,
+  .main-menu-trigger::after,
+  .main-menu-dropdown::after {
+    animation: none !important;
     transition: none !important;
   }
 }

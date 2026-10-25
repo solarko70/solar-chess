@@ -251,7 +251,7 @@ describe('Stage A2c-8: Sparkles, review galaxy, board frame, review spacing, and
     expect(themeRight).toBeGreaterThanOrEqual(closeRight + closeWidth + 8);
   });
 
-  it('all @keyframes in CSS animate only transform and opacity with no blur', () => {
+  it('all keyframes use allowed animation properties without blur', () => {
     const cssPath = path.resolve(__dirname, '../ui/styles.css');
     const css = fs.readFileSync(cssPath, 'utf8');
 
@@ -262,10 +262,15 @@ describe('Stage A2c-8: Sparkles, review galaxy, board frame, review spacing, and
     while ((match = keyframesRegex.exec(css)) !== null) {
       foundNames.push(match[1]);
       const body = match[2];
+      const allowedProperties = ['transform', 'opacity', 'from', 'to'];
+      // Stage 12c permits background shifts only for these two solar gradients.
+      if (['solar-text-shimmer', 'solar-photon-flow'].includes(match[1])) {
+        allowedProperties.push('background-position');
+      }
       const propMatches = body.matchAll(/([a-zA-Z-]+)\s*:/g);
       for (const pm of propMatches) {
         const prop = pm[1].trim();
-        expect(['transform', 'opacity', 'from', 'to']).toContain(prop);
+        expect(allowedProperties).toContain(prop);
       }
     }
 

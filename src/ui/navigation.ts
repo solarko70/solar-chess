@@ -9,7 +9,7 @@ export function buildHistoryButton(): string {
       <path d="M4 4h7a3 3 0 0 1 3 3v14a4 4 0 0 0-4-2H4zM14 7a3 3 0 0 1 3-3h4v15h-3a4 4 0 0 0-4 2"/>
       <path d="M7 8h3M7 12h3M17 8h1M17 12h1"/>
     </svg></span>
-    <span class="main-menu-label">${t('history.title')}</span>
+    <span class="main-menu-label menu-item-label">${t('history.title')}</span>
   </button>`;
 }
 
@@ -20,7 +20,7 @@ export function buildSettingsButton(): string {
       <path d="m9 3-.6 2.2-1.8 1L4.4 6 2.5 9.3l1.6 1.6v2.2l-1.6 1.6L4.4 18l2.2-.2 1.8 1L9 21h6l.6-2.2 1.8-1 2.2.2 1.9-3.3-1.6-1.6v-2.2l1.6-1.6L19.6 6l-2.2.2-1.8-1L15 3Z"/>
       <circle cx="12" cy="12" r="3.2"/>
     </svg></span>
-    <span class="main-menu-label">${t('nav.settings')}</span>
+    <span class="main-menu-label menu-item-label">${t('nav.settings')}</span>
   </button>`;
 }
 
@@ -37,20 +37,20 @@ export function buildMainMenu(themeIcon: string): string {
       <span class="main-menu-trigger-label">${t('nav.menu')}</span>
       ${CHEVRON_DOWN_ICON}
     </button>
-    <ul class="main-menu-dropdown" id="main-menu-dropdown" role="menu" aria-labelledby="main-menu-trigger">
+    <ul class="main-menu-dropdown" id="main-menu-dropdown" role="menu" aria-labelledby="main-menu-trigger" aria-hidden="true" inert>
       <li class="main-menu-row" id="menu-history-item" role="none">${buildHistoryButton()}</li>
       <li class="main-menu-row" id="menu-settings-item" role="none">${buildSettingsButton()}</li>
       <li class="main-menu-row" id="menu-theme-item" role="none">
         <button type="button" class="theme-toggle-btn main-menu-item" id="theme-btn" role="menuitem" aria-label="${t('common.themeToggleDark')}" title="${t('common.themeToggleDark')}">
           <span class="main-menu-icon" data-theme-icon>${themeIcon}</span>
-          <span class="main-menu-label">${t('nav.theme')}</span>
+          <span class="main-menu-label menu-item-label">${t('nav.theme')}</span>
           <span class="main-menu-value" data-theme-value>${t('nav.themeDark')}</span>
         </button>
       </li>
       <li class="main-menu-row" id="menu-variants-item" role="none">
         <button type="button" class="main-menu-item main-menu-item-soon" id="menu-variants-btn" role="menuitem" aria-disabled="true" disabled>
           <span class="main-menu-icon">${VARIANTS_ICON}</span>
-          <span class="main-menu-label">${t('nav.variants')}</span>
+          <span class="main-menu-label menu-item-label">${t('nav.variants')}</span>
           <span class="main-menu-badge">${t('common.soon')}</span>
         </button>
       </li>
@@ -73,12 +73,16 @@ export function syncThemeMenuItem(isDark: boolean, icon: string): void {
 
 const MENU_HOVER_CLOSE_MS = 220;
 let menuCleanup: (() => void) | null = null;
+let closeMainMenu: (() => void) | null = null;
 
 function setMainMenuOpen(open: boolean): void {
   const corner = document.getElementById('main-nav-corner');
   if (!corner) return;
   corner.classList.toggle('open', open);
   document.getElementById('main-menu-trigger')?.setAttribute('aria-expanded', String(open));
+  const dropdown = corner.querySelector('#main-menu-dropdown');
+  dropdown?.setAttribute('aria-hidden', String(!open));
+  dropdown?.toggleAttribute('inert', !open);
 }
 
 export function isMainMenuOpen(): boolean {
@@ -91,6 +95,10 @@ export function mountMainMenu(): () => void {
   const corner = document.getElementById('main-nav-corner');
   const trigger = document.getElementById('main-menu-trigger');
   if (!corner || !trigger) return () => {};
+
+  const instantMotion = (typeof process !== 'undefined' && process.env?.VITEST === 'true') ||
+    /jsdom/i.test(window.navigator.userAgent);
+  corner.setAttribute('data-instant-motion', String(instantMotion));
 
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
   let openedByHover = false;
@@ -105,6 +113,7 @@ export function mountMainMenu(): () => void {
   };
 
   const onTriggerClick = (): void => {
+    if (corner.style.display === 'none') return;
     clearCloseTimer();
     if (isMainMenuOpen() && openedByHover) {
       // A click on a hover-opened menu pins it open instead of closing it
@@ -115,6 +124,7 @@ export function mountMainMenu(): () => void {
     setMainMenuOpen(!isMainMenuOpen());
   };
   const onEnter = (): void => {
+    if (corner.style.display === 'none') return;
     clearCloseTimer();
     if (!isMainMenuOpen()) {
       openedByHover = true;
@@ -149,16 +159,20 @@ export function mountMainMenu(): () => void {
   document.addEventListener('keydown', onKeyDown);
 
   const cleanupFn = (): void => {
-    clearCloseTimer();
+    close();
     trigger.removeEventListener('click', onTriggerClick);
     corner.removeEventListener('mouseenter', onEnter);
     corner.removeEventListener('mouseleave', onLeave);
     corner.removeEventListener('click', onItemClick);
     document.removeEventListener('click', onDocumentClick);
     document.removeEventListener('keydown', onKeyDown);
-    if (menuCleanup === cleanupFn) menuCleanup = null;
+    if (menuCleanup === cleanupFn) {
+      menuCleanup = null;
+      closeMainMenu = null;
+    }
   };
   menuCleanup = cleanupFn;
+  closeMainMenu = close;
   return cleanupFn;
 }
 
@@ -168,7 +182,10 @@ export function updateMainMenuVisibility(route: AppRoute): void {
   if (!corner) return;
   const isHome = route === 'home';
   corner.style.display = isHome ? '' : 'none';
-  if (!isHome) setMainMenuOpen(false);
+  if (!isHome) {
+    if (closeMainMenu) closeMainMenu();
+    else setMainMenuOpen(false);
+  }
 }
 
 export function buildSolarLogo(): string {

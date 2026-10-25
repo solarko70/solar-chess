@@ -224,4 +224,81 @@ describe('Home dropdown navigation (Stage 12b)', () => {
     soundBtn.click()
     expect(solarAudio.isMuted()).toBe(false)
   })
+
+  it('sound remains visible and updates its icon and saved mute state on every route', () => {
+    for (const route of ['home', 'game', 'analysis', 'history', 'settings'] as const) {
+      getRouter()?.navigate(route)
+      const sound = document.getElementById('sound-btn')!
+      expect(sound.closest('[inert], [aria-hidden="true"]')).toBeNull()
+      expect(getComputedStyle(sound).display).not.toBe('none')
+      const originalIcon = sound.innerHTML
+      sound.click()
+      expect(solarAudio.isMuted()).toBe(true)
+      expect(sound.innerHTML).not.toBe(originalIcon)
+      expect(sound.getAttribute('aria-label')).toBe('Включить звук')
+      expect(localStorage.getItem('solar_chess_sound_muted')).toBe('true')
+      sound.click()
+      expect(sound.innerHTML).toBe(originalIcon)
+      expect(sound.getAttribute('aria-label')).toBe('Выключить звук')
+      expect(localStorage.getItem('solar_chess_sound_muted')).toBe('false')
+    }
+  })
+
+  it('sound stays available above archived review without exposing the home menu', () => {
+    vi.spyOn(ReviewPanelUI.prototype, 'startReview').mockResolvedValue(undefined)
+    saveGameToHistory({
+      id: 'sound-review', timestamp: 1000, dateFormatted: '25.10.2026', mode: 'pvp',
+      opponentTitle: 'Локальный игрок', playerColor: 'white', timeControl: 'Без часов',
+      result: 'win', reason: 'resignation', movesCount: 1, pgn: '1. e4 e5 1-0',
+    })
+    getRouter()?.navigate('history')
+    document.querySelector<HTMLButtonElement>('[data-history-action="review"]')!.click()
+    const sound = document.getElementById('sound-btn')!
+    expect(document.getElementById('review-overlay')?.style.display).toBe('flex')
+    expect(document.getElementById('main-nav-corner')?.style.display).toBe('none')
+    expect(sound.closest('[inert], [aria-hidden="true"]')).toBeNull()
+    sound.click()
+    expect(solarAudio.isMuted()).toBe(true)
+    sound.click()
+    expect(solarAudio.isMuted()).toBe(false)
+    expect(solarAudio.ensureContext()).toBeNull()
+    document.querySelector<HTMLButtonElement>('#review-overlay .review-overlay-close')!.click()
+    vi.restoreAllMocks()
+  })
+
+  it.each([
+    ['#menu-history-item #history-btn', 'history', 'Архив партий'],
+    ['#menu-settings-item #settings-btn', 'settings', 'Настройки'],
+  ] as const)('solar label clicks preserve the %s route and accessible name', (selector, route, name) => {
+    document.getElementById('main-menu-trigger')!.click()
+    const button = document.querySelector<HTMLButtonElement>(selector)!
+    const label = button.querySelector<HTMLElement>('.main-menu-label.menu-item-label')!
+    expect(button.disabled).toBe(false)
+    expect(button.getAttribute('role')).toBe('menuitem')
+    expect(button.getAttribute('aria-label')).toBe(name)
+    expect(label.textContent).toBe(name)
+    expect(label.hasAttribute('tabindex')).toBe(false)
+    expect(button.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+    label.click()
+    expect(window.location.hash).toBe(`#/${route}`)
+    expect(document.getElementById(`screen-${route}`)?.style.display).toBe('flex')
+    expect(document.getElementById('main-menu-dropdown')?.hasAttribute('inert')).toBe(true)
+  })
+
+  it('solar theme label keeps its action and soon labels remain disabled', () => {
+    document.getElementById('main-menu-trigger')!.click()
+    const theme = document.getElementById('theme-btn')!
+    theme.querySelector<HTMLElement>('.menu-item-label')!.click()
+    expect(localStorage.getItem(COLOR_THEME_STORAGE_KEY)).toBe('light')
+    expect(theme.querySelector('[data-theme-value]')?.textContent).toBe('Светлая')
+    expect(theme.querySelector('[data-theme-icon] svg')).not.toBeNull()
+    expect(theme.getAttribute('aria-label')).toBe('Светлая тема')
+    expect(document.getElementById('main-menu-trigger')?.getAttribute('aria-expanded')).toBe('true')
+    const variants = document.getElementById('menu-variants-btn') as HTMLButtonElement
+    expect(variants.disabled).toBe(true)
+    expect(variants.getAttribute('aria-disabled')).toBe('true')
+    expect(variants.querySelector('.main-menu-badge')?.textContent).toBe('Скоро')
+    variants.click()
+    expect(window.location.hash).toBe('#/')
+  })
 })

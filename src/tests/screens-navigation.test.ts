@@ -544,4 +544,85 @@ describe('Home dropdown menu and top-right sound control (Stage 12b)', () => {
     getRouter()?.navigate('home');
     expect(document.getElementById('main-nav-corner')?.style.display).not.toBe('none');
   });
+
+  it('closed dropdown is inert and hidden from assistive technology', () => {
+    const dropdown = document.getElementById('main-menu-dropdown')!;
+    const trigger = document.getElementById('main-menu-trigger')!;
+    expect(dropdown.hasAttribute('inert')).toBe(true);
+    expect(dropdown.getAttribute('aria-hidden')).toBe('true');
+    trigger.click();
+    expect(dropdown.hasAttribute('inert')).toBe(false);
+    expect(dropdown.getAttribute('aria-hidden')).toBe('false');
+    trigger.click();
+    expect(dropdown.hasAttribute('inert')).toBe(true);
+    expect(dropdown.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('returning to the dropdown cancels the hover close timer', () => {
+    vi.useFakeTimers();
+    const corner = document.getElementById('main-nav-corner')!;
+    corner.dispatchEvent(new MouseEvent('mouseenter'));
+    corner.dispatchEvent(new MouseEvent('mouseleave'));
+    vi.advanceTimersByTime(219);
+    corner.dispatchEvent(new MouseEvent('mouseenter'));
+    vi.advanceTimersByTime(221);
+    expect(corner.classList.contains('open')).toBe(true);
+    corner.dispatchEvent(new MouseEvent('mouseleave'));
+    vi.advanceTimersByTime(220);
+    expect(corner.classList.contains('open')).toBe(false);
+  });
+
+  it('route changes cancel stale hover timers before returning home', () => {
+    vi.useFakeTimers();
+    const corner = document.getElementById('main-nav-corner')!;
+    const trigger = document.getElementById('main-menu-trigger')!;
+    corner.dispatchEvent(new MouseEvent('mouseenter'));
+    corner.dispatchEvent(new MouseEvent('mouseleave'));
+    getRouter()?.navigate('settings');
+    expect(document.getElementById('main-menu-dropdown')?.hasAttribute('inert')).toBe(true);
+    trigger.click();
+    corner.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(corner.classList.contains('open')).toBe(false);
+    getRouter()?.navigate('home');
+    corner.dispatchEvent(new MouseEvent('mouseenter'));
+    vi.advanceTimersByTime(220);
+    expect(corner.classList.contains('open')).toBe(true);
+  });
+
+  it('dropdown transitions are disabled in tests and with reduced motion', () => {
+    expect(document.getElementById('main-nav-corner')?.getAttribute('data-instant-motion')).toBe('true');
+    const css = fs.readFileSync(path.resolve(__dirname, '../ui/styles.css'), 'utf8');
+    const instant = css.match(/\.main-nav-corner\[data-instant-motion='true'\][^{]+\{([^}]+)\}/)![1];
+    expect(instant).toContain('animation: none !important');
+    expect(instant).toContain('transition: none !important');
+    const reduced = css.slice(css.indexOf('/* Home dropdown switches instantly:'));
+    expect(reduced).toMatch(/\.main-menu-dropdown[^}]+transition: none !important/);
+  });
+
+  it('solar effects animate only background position and opacity with noninteractive decoration', () => {
+    const css = fs.readFileSync(path.resolve(__dirname, '../ui/styles.css'), 'utf8');
+    for (const name of ['solar-text-shimmer', 'solar-photon-flow', 'solar-aura-pulse']) {
+      const frames = css.match(new RegExp(`@keyframes ${name} \\{([\\s\\S]*?\\n)\\}`))![1];
+      const properties = [...frames.matchAll(/([\w-]+)\s*:/g)].map(match => match[1]);
+      expect(properties.length).toBeGreaterThan(0);
+      expect(properties.every(property => ['background-position', 'opacity'].includes(property))).toBe(true);
+    }
+    const decoration = css.match(/\.main-menu-trigger::after,\s*\.main-menu-dropdown::after\s*\{([^}]+)\}/)![1];
+    expect(decoration).toContain("content: ''");
+    expect(decoration).toContain('pointer-events: none');
+    expect(css).toMatch(/\.main-nav-corner\.open \.main-menu-item:is\(:hover, :focus-visible\):not\(:disabled\):not\(\[aria-disabled='true'\]\) \.menu-item-label\s*\{[^}]*solar-text-shimmer 2\.4s linear infinite/);
+  });
+
+  it('instant and reduced motion overrides cover solar text, contour and glow', () => {
+    const css = fs.readFileSync(path.resolve(__dirname, '../ui/styles.css'), 'utf8');
+    const instant = css.match(/\.main-nav-corner\[data-instant-motion='true'\][^{]+\{[^}]+\}/)![0];
+    const reduced = css.slice(css.indexOf('/* Home dropdown switches instantly:')).split('}')[0];
+    for (const rule of [instant, reduced]) {
+      for (const selector of ['.main-menu-trigger', '.main-menu-dropdown', '.menu-item-label', '.main-menu-icon', '::after']) {
+        expect(rule).toContain(selector);
+      }
+      expect(rule).toContain('animation: none !important');
+      expect(rule).toContain('transition: none !important');
+    }
+  });
 });
