@@ -150,31 +150,38 @@ export class VariantSetupModal {
   private playerColor: PlayerColorChoice = 'white';
   private timeControl: TimeControlMode = 'none';
 
+  // Global Escape handler is attached only while the modal is open
+  private readonly handleKeyDown = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.close();
+    }
+  };
+
+  // The DOM is created lazily in open(): nothing is mounted on app start
   constructor(onStart: (config: VariantMatchConfig) => void) {
     this.onStart = onStart;
-    this.createDOM();
   }
 
   private createDOM(): void {
-    const existing = document.getElementById('variant-setup-modal');
-    if (existing) existing.remove();
+    document.getElementById('variant-setup-modal')?.remove();
 
     this.overlay = document.createElement('div');
-    this.overlay.className = 'setup-modal-overlay variant-setup-overlay hidden';
+    this.overlay.className = 'variant-setup-overlay';
     this.overlay.id = 'variant-setup-modal';
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-modal', 'true');
     this.overlay.setAttribute('aria-labelledby', 'variant-setup-title');
 
     this.overlay.innerHTML = `
-      <div class="setup-modal-card variant-setup-card">
-        <div class="setup-modal-header">
-          <h3 class="setup-modal-title" id="variant-setup-title">Настройка матча: King of the Hill</h3>
-          <button type="button" class="setup-modal-close" id="variant-setup-close" aria-label="Закрыть">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <div class="variant-setup-card">
+        <div class="variant-setup-header">
+          <h3 class="variant-setup-title" id="variant-setup-title">Настройка матча: King of the Hill</h3>
+          <button type="button" class="modal-close-btn" id="variant-modal-close" aria-label="Закрыть">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <div class="setup-modal-body">
+        <div class="variant-setup-body">
           <div class="setup-section">
             <label class="setup-label">Выбор соперника</label>
             <div class="variant-segmented-row" id="variant-opponent-group">
@@ -212,9 +219,9 @@ export class VariantSetupModal {
             </div>
           </div>
         </div>
-        <div class="setup-modal-footer">
-          <button type="button" class="setup-btn-cancel" id="btn-variant-cancel">Отмена</button>
-          <button type="button" class="setup-btn-start" id="btn-variant-start">Начать партию</button>
+        <div class="variant-setup-footer">
+          <button type="button" class="btn-variant-cancel" id="variant-cancel-btn">Отмена</button>
+          <button type="button" class="btn-variant-start" id="btn-variant-start">Начать партию</button>
         </div>
       </div>
     `;
@@ -226,11 +233,13 @@ export class VariantSetupModal {
   private bindEvents(): void {
     if (!this.overlay) return;
 
-    this.overlay.querySelector('#variant-setup-close')?.addEventListener('click', () => this.close());
-    this.overlay.querySelector('#btn-variant-cancel')?.addEventListener('click', () => this.close());
+    const overlay = this.overlay;
+    overlay.querySelector('#variant-modal-close')?.addEventListener('click', () => this.close());
+    overlay.querySelector('#variant-cancel-btn')?.addEventListener('click', () => this.close());
 
-    this.overlay.addEventListener('click', (e) => {
-      if (e.target === this.overlay) this.close();
+    // Backdrop click outside the card closes the modal
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this.close();
     });
 
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-opponent]').forEach((btn) => {
@@ -282,6 +291,7 @@ export class VariantSetupModal {
         playerColor: this.playerColor,
         timeControl: this.timeControl,
       };
+      // Remove the modal from the DOM before the game screen is mounted
       this.close();
       this.onStart(config);
     });
@@ -319,16 +329,23 @@ export class VariantSetupModal {
 
   public open(variant: VariantId): void {
     this.currentVariant = variant;
+    if (!this.overlay) {
+      this.createDOM();
+      document.addEventListener('keydown', this.handleKeyDown);
+    }
     this.syncUI();
-    this.overlay?.classList.remove('hidden');
   }
 
+  /** Closes the modal, removes it from the DOM and detaches the Escape listener. Safe to call twice. */
   public close(): void {
-    this.overlay?.classList.add('hidden');
+    document.removeEventListener('keydown', this.handleKeyDown);
+    if (!this.overlay) return;
+    this.overlay.remove();
+    this.overlay = null;
   }
 
   public isOpen(): boolean {
-    return Boolean(this.overlay && !this.overlay.classList.contains('hidden'));
+    return this.overlay !== null && this.overlay.isConnected;
   }
 
   public getCurrentVariant(): VariantId {
@@ -360,6 +377,15 @@ export class VariantsUI {
 
   public getSetupModal(): VariantSetupModal {
     return this.setupModal;
+  }
+
+  /** Closes and unmounts the variant setup modal (called on every route change). */
+  public closeModal(): void {
+    this.setupModal.close();
+  }
+
+  public destroy(): void {
+    this.setupModal.close();
   }
 
   public selectTab(tab: VariantsTabId): void {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { initApp } from '@/main';
 import { globalStore } from '@/state/store';
 import { parseFEN } from '@/core';
@@ -84,7 +84,8 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
     kothPlayBtn.click();
 
     const modal = document.getElementById('variant-setup-modal')!;
-    expect(modal.classList.contains('hidden')).toBe(false);
+    expect(modal).not.toBeNull();
+    expect(modal.isConnected).toBe(true);
 
     // Configure PvP + 3+2 time control
     modal.querySelector<HTMLButtonElement>('[data-opponent="pvp"]')!.click();
@@ -92,7 +93,7 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
     modal.querySelector<HTMLButtonElement>('[data-time="blitz-3-2"]')!.click();
     modal.querySelector<HTMLButtonElement>('#btn-variant-start')!.click();
 
-    expect(modal.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
     expect(window.location.hash).toBe('#/game');
     expect(globalStore.getVariant()).toBe('king-of-the-hill');
     expect(globalStore.getGameMode()).toBe('pvp');
@@ -102,11 +103,12 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
     document.getElementById('btn-back-to-main')!.click();
     document.getElementById('btn-play-variants')!.click();
     document.querySelector<HTMLButtonElement>('[data-play-variant="three-check"]')!.click();
-    modal.querySelector<HTMLButtonElement>('[data-opponent="ai"]')!.click();
-    modal.querySelector<HTMLButtonElement>('[data-bot-level="novice"]')!.click();
-    modal.querySelector<HTMLButtonElement>('[data-color="white"]')!.click();
-    modal.querySelector<HTMLButtonElement>('[data-time="none"]')!.click();
-    modal.querySelector<HTMLButtonElement>('#btn-variant-start')!.click();
+    const modal2 = document.getElementById('variant-setup-modal')!;
+    modal2.querySelector<HTMLButtonElement>('[data-opponent="ai"]')!.click();
+    modal2.querySelector<HTMLButtonElement>('[data-bot-level="novice"]')!.click();
+    modal2.querySelector<HTMLButtonElement>('[data-color="white"]')!.click();
+    modal2.querySelector<HTMLButtonElement>('[data-time="none"]')!.click();
+    modal2.querySelector<HTMLButtonElement>('#btn-variant-start')!.click();
 
     expect(globalStore.getVariant()).toBe('three-check');
     expect(globalStore.getGameMode()).toBe('ai');
@@ -122,6 +124,96 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
     expect(document.getElementById('player-checks-top')?.textContent).toBe('+1');
     expect(document.getElementById('white-checks-badge')?.textContent).toBe('+2');
     expect(document.getElementById('black-checks-badge')?.textContent).toBe('+1');
+  });
+});
+
+describe('Stage 13b: VariantSetupModal lifecycle and closing', () => {
+  const openKoth = (): HTMLElement => {
+    document.querySelector<HTMLButtonElement>('[data-play-variant="king-of-the-hill"]')!.click();
+    return document.getElementById('variant-setup-modal')!;
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '<div id="app"></div>';
+    window.location.hash = '#/';
+    initApp();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    window.location.hash = '#/';
+  });
+
+  it('does not mount the modal on app start or on #/variants until Play is clicked', () => {
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
+    expect(document.querySelector('.variant-setup-overlay')).toBeNull();
+    document.getElementById('btn-play-variants')!.click();
+    expect(window.location.hash).toBe('#/variants');
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
+  });
+
+  it('opens the modal on King of the Hill Play click with solar header and actions', () => {
+    document.getElementById('btn-play-variants')!.click();
+    const modal = openKoth();
+    expect(modal).not.toBeNull();
+    expect(modal.classList.contains('variant-setup-overlay')).toBe(true);
+    expect(modal.querySelector('#variant-setup-title')?.textContent).toContain('King of the Hill');
+    const header = modal.querySelector('.variant-setup-header')!;
+    expect(header.querySelector('.modal-close-btn#variant-modal-close')).not.toBeNull();
+    expect(modal.querySelector('.variant-setup-footer .btn-variant-cancel#variant-cancel-btn')).not.toBeNull();
+    expect(modal.querySelector('.variant-setup-footer .btn-variant-start#btn-variant-start')).not.toBeNull();
+    expect(modal.textContent).not.toMatch(/[\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}]/u);
+  });
+
+  it('closes and unmounts the modal via Cancel, close icon, backdrop click and Escape', () => {
+    document.getElementById('btn-play-variants')!.click();
+
+    openKoth().querySelector<HTMLButtonElement>('#variant-cancel-btn')!.click();
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
+
+    openKoth().querySelector<HTMLButtonElement>('#variant-modal-close')!.click();
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
+
+    const overlay = openKoth();
+    overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
+
+    openKoth();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
+
+    // A click inside the card must not close the modal
+    const modal = openKoth();
+    modal.querySelector<HTMLElement>('.variant-setup-card')!.click();
+    expect(document.getElementById('variant-setup-modal')).not.toBeNull();
+  });
+
+  it('detaches the Escape keydown listener from document after closing', () => {
+    document.getElementById('btn-play-variants')!.click();
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    openKoth().querySelector<HTMLButtonElement>('#variant-cancel-btn')!.click();
+    const added = addSpy.mock.calls.find(([type]) => type === 'keydown')?.[1];
+    expect(added).toBeDefined();
+    expect(removeSpy.mock.calls.some(([type, fn]) => type === 'keydown' && fn === added)).toBe(true);
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  it('removes the modal from the DOM on navigation to #/ and #/game', () => {
+    document.getElementById('btn-play-variants')!.click();
+    openKoth();
+    window.location.hash = '#/';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
+
+    document.getElementById('btn-play-variants')!.click();
+    openKoth().querySelector<HTMLButtonElement>('[data-opponent="pvp"]')!.click();
+    document.getElementById('btn-variant-start')!.click();
+    expect(window.location.hash).toBe('#/game');
+    expect(document.getElementById('variant-setup-modal')).toBeNull();
+    expect(document.getElementById('screen-game')?.style.display).toBe('flex');
   });
 });
 

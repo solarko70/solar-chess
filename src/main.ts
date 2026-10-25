@@ -432,6 +432,7 @@ export function initApp(): void {
   let historyArchive: HistoryArchiveUI | null = null;
   let archivedReview: ArchivedGameReviewUI | null = null;
   let gameOverModal: GameOverModalUI;
+  let variantsUI: VariantsUI | null = null;
   const closeArchivedReview = (): void => {
     archivedReview?.destroy();
     archivedReview = null;
@@ -440,6 +441,9 @@ export function initApp(): void {
 
   // Setup router
   currentRouter = new HashRouter((route: AppRoute) => {
+    // Any hash navigation closes and unmounts the variant setup modal
+    variantsUI?.closeModal();
+    document.getElementById('variant-setup-modal')?.remove();
     syncBgAnimState();
     if (route !== 'game' && isReviewOverlayOpen) closeReviewOverlay(false);
     if (route !== 'history' && archivedReview) closeArchivedReview();
@@ -534,6 +538,8 @@ export function initApp(): void {
 
   const originalRouterDestroy = currentRouter.destroy.bind(currentRouter);
   currentRouter.destroy = () => {
+    variantsUI?.destroy();
+    variantsUI = null;
     closeArchivedReview();
     historyArchive?.destroy();
     stopHistoryTracking();
@@ -568,7 +574,7 @@ export function initApp(): void {
     currentRouter?.navigate('game');
   });
 
-  new VariantsUI(document.getElementById('screen-variants')!, {
+  variantsUI = new VariantsUI(document.getElementById('screen-variants')!, {
     onBack: () => currentRouter?.navigate('home'),
     onStartVariantMatch: (config) => {
       globalStore.setClockMode(config.timeControl);
