@@ -6437,7 +6437,8 @@ body.history-active #app { max-width: none; }
 .history-card-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .card-date { min-width: 0; text-align: right; overflow-wrap: anywhere; }
 .history-card-body { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin: 0.75rem 0; }
-.card-info-col { display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-width: 0; }
+.card-info-col { display: flex; flex: 1; flex-direction: column; justify-content: flex-start; align-items: flex-start; align-self: stretch; min-width: 0; min-height: 140px; }
+.card-meta { flex-grow: 1; padding-bottom: 14px; }
 .card-board-col { flex: 0 0 140px; align-self: flex-start; }
 .archive-piece-sprite { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
 .game-card-miniboard { width: 140px; height: 140px; flex: 0 0 140px; overflow: hidden; border-radius: 6px; box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.28); pointer-events: none; }
@@ -6450,7 +6451,7 @@ body.history-active #app { max-width: none; }
 .archive-result-win { color: #4ade80; background: rgba(34, 197, 94, 0.1); }
 .archive-result-loss { color: #f87171; background: rgba(239, 68, 68, 0.1); }
 .archive-result-draw { color: var(--text-secondary); background: var(--bg-tertiary); }
-.archive-accuracies { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.archive-accuracies { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: auto; margin-bottom: 0; }
 .archive-accuracy { align-items: center; gap: 6px; max-width: 100%; padding: 5px 9px 5px 5px; border-radius: 999px; background: rgba(148, 163, 184, 0.06); color: var(--text-secondary); }
 .archive-accuracy > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 .archive-accuracy.is-player-accuracy { position: relative; isolation: isolate; border-color: rgba(245, 158, 11, 0.65); box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }

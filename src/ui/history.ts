@@ -124,8 +124,8 @@ export class HistoryArchiveUI {
     </header>
     <div class="history-card-body"><div class="card-info-col archive-card-details">
     <h2 class="card-opponent-title">${escapeHistoryText(record.opponentTitle)}</h2>
-    <p class="archive-meta">${t(`history.${record.playerColor}`)} · ${escapeHistoryText(record.timeControl)} · ${t('history.moves')}: ${record.movesCount} · ${escapeHistoryText(t(`history.${record.reason}`))}</p>
-    <div class="archive-accuracies" aria-label="${t('history.accuracy')}">${accuracy}</div>
+    <p class="card-meta archive-meta">${t(`history.${record.playerColor}`)} · ${escapeHistoryText(record.timeControl)} · ${t('history.moves')}: ${record.movesCount} · ${escapeHistoryText(t(`history.${record.reason}`))}</p>
+    <div class="card-accuracy-row archive-accuracies" aria-label="${t('history.accuracy')}">${accuracy}</div>
     </div><div class="card-board-col">${buildArchiveMiniBoard(record, this.spritePrefix)}</div></div>
     <footer class="history-card-actions card-footer archive-actions">${(['review', 'pgn', 'delete'] as const).map((action) =>
       `<button type="button" class="${action === 'review' ? 'solar-btn' : 'solar-btn-ghost'} btn-${action}" data-history-action="${action}">${archiveIcon(action)}<span>${action === 'pgn' ? 'PGN' : t(`history.${action}`)}</span></button>`).join('')}
