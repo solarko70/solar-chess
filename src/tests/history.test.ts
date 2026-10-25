@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   clearAllHistory, deleteGameFromHistory, GAME_HISTORY_STORAGE_KEY,
   getGameById, getGameHistory, saveGameToHistory, toggleFavorite, type GameRecord,
@@ -219,15 +221,22 @@ describe('Game history autosave', () => {
 
 describe('Game history screen', () => {
   let container: HTMLElement;
+  let stylesheet: HTMLStyleElement;
   let screen: HistoryArchiveUI;
   const onReview = vi.fn();
   beforeEach(() => {
     onReview.mockClear();
+    const css = readFileSync(resolve(__dirname, '../ui/styles.css'), 'utf8');
+    stylesheet = document.createElement('style');
+    stylesheet.textContent = css.slice(css.indexOf('/* Local game archive'),
+      css.indexOf('/* Solar Chess Background')) + css.slice(css.indexOf(
+        '@media (prefers-reduced-motion: reduce)', css.indexOf('/* Solar Chess Background')));
+    document.head.appendChild(stylesheet);
     container = document.createElement('div');
     document.body.appendChild(container);
     screen = new HistoryArchiveUI(container, { onBack: vi.fn(), onReview });
   });
-  afterEach(() => { screen.destroy(); container.remove(); });
+  afterEach(() => { screen.destroy(); container.remove(); stylesheet.remove(); });
 
   it('shows the empty state and all result filters', () => {
     expect(container.textContent).toContain('Пока нет завершённых партий. Сыграйте с ботом или другом!');
@@ -247,6 +256,68 @@ describe('Game history screen', () => {
       container.querySelector<HTMLButtonElement>(`[data-history-filter="${result}"]`)!.click();
       expect(container.querySelectorAll('.archive-card')).toHaveLength(result === 'all' ? 3 : 1);
       expect(container.querySelector('[aria-pressed="true"]')?.getAttribute('data-history-filter')).toBe(result);
+    }
+  });
+
+  it.each(['win', 'loss', 'draw'] as const)('applies the %s outcome class to its card', (result) => {
+    saveGameToHistory(record('game-1', result));
+    screen.refresh();
+    const card = container.querySelector('.history-card')!;
+    expect(card.classList.contains(`card-${result}`)).toBe(true);
+    expect([...card.classList].filter((name) => /^card-(win|loss|draw)$/.test(name)))
+      .toEqual([`card-${result}`]);
+  });
+
+  it.each(['white', 'black'] as const)('highlights only the %s player accuracy chip', (playerColor) => {
+    saveGameToHistory({ ...record(), playerColor, whiteAccuracy: 0, blackAccuracy: 97.4 });
+    screen.refresh();
+    const player = container.querySelector(`.archive-accuracy-${playerColor}`)!;
+    const opponent = container.querySelector(`.archive-accuracy-${playerColor === 'white' ? 'black' : 'white'}`)!;
+    expect(container.querySelectorAll('.is-player-accuracy')).toHaveLength(1);
+    expect(player.classList.contains('is-player-accuracy')).toBe(true);
+    expect(player.querySelector('.accuracy-solar-border')?.getAttribute('aria-hidden')).toBe('true');
+    expect(opponent.classList.contains('is-player-accuracy')).toBe(false);
+    expect(opponent.querySelector('.accuracy-solar-border')).toBeNull();
+  });
+
+  it.each(['white', 'black'] as const)('keeps opponent accuracy calm when %s player accuracy is absent', (playerColor) => {
+    saveGameToHistory({ ...record(), playerColor,
+      ...(playerColor === 'white' ? { blackAccuracy: 90 } : { whiteAccuracy: 90 }) });
+    screen.refresh();
+    expect(container.querySelectorAll('.archive-accuracy')).toHaveLength(1);
+    expect(container.querySelector('.is-player-accuracy, .accuracy-solar-border')).toBeNull();
+  });
+
+  it('keeps match details on the left and the date above a 140px board on the right', () => {
+    saveGameToHistory({ ...record(), whiteAccuracy: 95 });
+    screen.refresh();
+    const card = container.querySelector<HTMLElement>('.history-card')!;
+    const details = card.querySelector('.archive-card-details')!;
+    const preview = card.querySelector('.archive-card-preview')!;
+    const mini = preview.querySelector('.game-card-miniboard')!;
+    expect(getComputedStyle(card).gridTemplateColumns).toBe('minmax(0, 1fr) 140px');
+    for (const selector of ['.archive-result', 'h2', '.archive-meta', '.archive-accuracies', '.archive-actions']) {
+      expect(details.querySelector(selector)).not.toBeNull();
+    }
+    expect(preview.querySelector('time')?.nextElementSibling).toBe(mini);
+    expect(parseFloat(getComputedStyle(mini).width)).toBe(140);
+    expect(parseFloat(getComputedStyle(mini).height)).toBe(140);
+    expect(getComputedStyle(mini).flexShrink).toBe('0');
+  });
+
+  it('disables the solar border animation in tests and for reduced motion', () => {
+    expect(container.querySelector('.archive-center')?.getAttribute('data-instant-motion')).toBe('true');
+    const rules = [...stylesheet.sheet!.cssRules];
+    const instant = rules.find((rule) => 'selectorText' in rule &&
+      rule.selectorText === ".archive-center[data-instant-motion='true'] .accuracy-solar-border::before") as CSSStyleRule;
+    const reduced = rules.find((rule) => 'conditionText' in rule &&
+      rule.conditionText === '(prefers-reduced-motion: reduce)') as CSSMediaRule;
+    const border = [...reduced.cssRules].find((rule) => 'selectorText' in rule &&
+      rule.selectorText === '.accuracy-solar-border::before') as CSSStyleRule;
+    for (const rule of [instant, border]) {
+      expect(rule.style.getPropertyValue('animation')).toBe('none');
+      expect(rule.style.getPropertyPriority('animation')).toBe('important');
+      expect(rule.style.getPropertyValue('will-change')).toBe('auto');
     }
   });
 
@@ -296,7 +367,7 @@ describe('Game history screen', () => {
     screen.refresh();
     const mini = container.querySelector<HTMLElement>('.game-card-miniboard')!;
     expect(mini.getAttribute('aria-hidden')).toBe('true');
-    expect(mini.querySelector('svg')?.getAttribute('width')).toBe('84');
+    expect(mini.querySelector('svg')?.getAttribute('width')).toBe('140');
     expect(mini.querySelectorAll('use')).toHaveLength(32);
     expect(mini.querySelector('button, [tabindex], foreignObject, image')).toBeNull();
     const knight = mini.querySelector('[data-square="45"]')!;

@@ -36,7 +36,7 @@ function buildArchiveMiniBoard(record: GameRecord, prefix: string): string {
     const piece = state.board.pieces[square];
     if (piece) pieces += `<use href="#${prefix}-${piece.color}-${PIECE_SYMBOLS[piece.type]}" x="${x}" y="${y}" width="10" height="10" data-square="${square}"/>`;
   }
-  return `<div class="game-card-miniboard" aria-hidden="true" data-orientation="${record.playerColor}"><svg viewBox="0 0 80 80" width="84" height="84" aria-hidden="true" focusable="false"><rect width="80" height="80" class="archive-square-light"/><path d="${darkSquares}" class="archive-square-dark"/>${pieces}</svg></div>`;
+  return `<div class="game-card-miniboard" aria-hidden="true" data-orientation="${record.playerColor}"><svg viewBox="0 0 80 80" width="140" height="140" aria-hidden="true" focusable="false"><rect width="80" height="80" class="archive-square-light"/><path d="${darkSquares}" class="archive-square-dark"/>${pieces}</svg></div>`;
 }
 
 export function archiveIcon(name: keyof typeof ARCHIVE_ICONS): string {
@@ -108,28 +108,27 @@ export class HistoryArchiveUI {
 
   private createCard(record: GameRecord): HTMLElement {
     const card = document.createElement('article');
-    card.className = `archive-card solar-card${record.isFavorite ? ' is-favorite' : ''}`;
+    card.className = `archive-card history-card solar-card card-${record.result}${record.isFavorite ? ' is-favorite' : ''}`;
     card.dataset.gameId = record.id;
     const accuracy = (['white', 'black'] as const).map((side) => {
       const value = record[side === 'white' ? 'whiteAccuracy' : 'blackAccuracy'];
       if (value === undefined) return '';
       const percent = Math.max(0, Math.min(100, value));
       const tier = percent > 80 ? 'gold' : percent >= 70 ? 'emerald' : 'slate';
-      return `<span class="archive-accuracy archive-accuracy-${side} accuracy-${tier}"><svg class="archive-accuracy-ring" viewBox="0 0 28 28" aria-hidden="true" focusable="false"><circle class="accuracy-track" cx="14" cy="14" r="11"/><circle class="accuracy-progress" cx="14" cy="14" r="11" pathLength="100" stroke-dasharray="${percent} 100"/></svg><span class="accuracy-side" aria-hidden="true"></span><span>${t(`history.${side}`)}: <strong>${percent.toFixed(1)}%</strong></span></span>`;
+      const isPlayer = side === record.playerColor;
+      return `<span class="archive-accuracy archive-accuracy-${side} accuracy-${tier}${isPlayer ? ' is-player-accuracy' : ''}">${isPlayer ? '<span class="accuracy-solar-border" aria-hidden="true"></span>' : ''}<svg class="archive-accuracy-ring" viewBox="0 0 28 28" aria-hidden="true" focusable="false"><circle class="accuracy-track" cx="14" cy="14" r="11"/><circle class="accuracy-progress" cx="14" cy="14" r="11" pathLength="100" stroke-dasharray="${percent} 100"/></svg><span class="accuracy-side" aria-hidden="true"></span><span>${t(`history.${side}`)}: <strong>${percent.toFixed(1)}%</strong></span></span>`;
     }).join('');
-    card.innerHTML = `<div class="archive-card-heading">
+    card.innerHTML = `<div class="archive-card-details"><div class="archive-card-heading">
       <span class="archive-result archive-result-${record.result}">${t(`history.${record.result}`)}</span>
-      <time datetime="${new Date(record.timestamp).toISOString()}">${escapeHistoryText(record.dateFormatted)}</time>
     </div>
-    <div class="archive-card-body"><div class="archive-card-details">
     <h2>${escapeHistoryText(record.opponentTitle)}</h2>
     <p class="archive-meta">${t(`history.${record.playerColor}`)} · ${escapeHistoryText(record.timeControl)} · ${t('history.moves')}: ${record.movesCount}</p>
     <p class="archive-meta">${escapeHistoryText(t(`history.${record.reason}`))}</p>
-    </div>${buildArchiveMiniBoard(record, this.spritePrefix)}</div>
     <div class="archive-accuracies" aria-label="${t('history.accuracy')}">${accuracy}</div>
     <div class="archive-actions">${(['review', 'pgn', 'delete'] as const).map((action) =>
       `<button type="button" class="${action === 'review' ? 'solar-btn' : 'solar-btn-ghost'} btn-${action}" data-history-action="${action}">${archiveIcon(action)}<span>${action === 'pgn' ? 'PGN' : t(`history.${action}`)}</span></button>`).join('')}
-      <button type="button" class="solar-btn-ghost btn-favorite${record.isFavorite ? ' active' : ''}" data-history-action="favorite" aria-pressed="${record.isFavorite === true}" aria-label="${t(record.isFavorite ? 'history.removeFavorite' : 'history.addFavorite')}" title="${t(record.isFavorite ? 'history.removeFavorite' : 'history.addFavorite')}">${archiveIcon('favorite')}</button></div>`;
+      <button type="button" class="solar-btn-ghost btn-favorite${record.isFavorite ? ' active' : ''}" data-history-action="favorite" aria-pressed="${record.isFavorite === true}" aria-label="${t(record.isFavorite ? 'history.removeFavorite' : 'history.addFavorite')}" title="${t(record.isFavorite ? 'history.removeFavorite' : 'history.addFavorite')}">${archiveIcon('favorite')}</button></div></div>
+    <div class="archive-card-preview"><time datetime="${new Date(record.timestamp).toISOString()}">${escapeHistoryText(record.dateFormatted)}</time>${buildArchiveMiniBoard(record, this.spritePrefix)}</div>`;
     return card;
   }
 

@@ -6426,27 +6426,40 @@ body.history-active #app { max-width: none; }
 .archive-filters button, .archive-actions button { min-height: 44px; padding: 10px 16px; transition: none; }
 .archive-filters button[aria-pressed='true'] { color: var(--solar-gold); border-color: var(--solar-gold); background: var(--bg-secondary); }
 .archive-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.archive-card { min-width: 0; padding: 24px; border: 1px solid var(--bg-tertiary); border-radius: 16px; background: var(--bg-secondary); transition: transform 0.18s ease; }
-.archive-card:hover { transform: translateY(-2px); border-color: var(--solar-gold); box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.5), 0 0 18px rgba(245, 158, 11, 0.12); }
+.archive-card { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 20px; min-width: 0; padding: 24px; border: 1px solid var(--bg-tertiary); border-radius: 16px; background: var(--bg-primary); transform: translateZ(0); transition: transform 0.18s ease; }
+.history-card.card-win { background: radial-gradient(circle at 0% 0%, rgba(16, 185, 129, 0.22) 0%, rgba(16, 185, 129, 0.05) 45%, transparent 70%), var(--bg-primary); border-color: rgba(16, 185, 129, 0.35); }
+.history-card.card-loss { background: radial-gradient(circle at 0% 0%, rgba(239, 68, 68, 0.20) 0%, rgba(239, 68, 68, 0.04) 45%, transparent 70%), var(--bg-primary); border-color: rgba(239, 68, 68, 0.30); }
+.history-card.card-draw { background: radial-gradient(circle at 0% 0%, rgba(148, 163, 184, 0.16) 0%, rgba(148, 163, 184, 0.03) 45%, transparent 65%), var(--bg-primary); border-color: rgba(148, 163, 184, 0.25); }
+.archive-card:hover { transform: translate3d(0, -2px, 0); border-color: var(--solar-gold); box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.5), 0 0 18px rgba(245, 158, 11, 0.12); }
 .archive-card.is-favorite { border-color: rgba(245, 158, 11, 0.45); }
 .archive-card.is-favorite:hover { border-color: var(--solar-gold); }
 .archive-card h2 { margin: 0 0 10px; font-size: 1.2rem; overflow-wrap: anywhere; }
-.archive-card-body { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; }
-.archive-card-details { min-width: 0; }
+.archive-card-details { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.archive-card-preview { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 16px; min-width: 0; }
+.archive-card-preview time { text-align: right; overflow-wrap: anywhere; }
 .archive-piece-sprite { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
-.game-card-miniboard { width: 84px; height: 84px; flex: 0 0 84px; overflow: hidden; border-radius: 6px; box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.28); pointer-events: none; }
+.game-card-miniboard { width: 140px; height: 140px; flex: 0 0 140px; overflow: hidden; border-radius: 6px; box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.28); pointer-events: none; }
 .game-card-miniboard svg { display: block; width: 100%; height: 100%; }
 .game-card-miniboard * { pointer-events: none; }
 .archive-square-light { fill: var(--sq-light); }
 .archive-square-dark { fill: var(--sq-dark); }
-.archive-card-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.archive-card-heading { margin-bottom: 18px; }
 .archive-card time, .archive-meta { color: var(--text-secondary); font-size: 0.82rem; line-height: 1.6; }
 .archive-result, .archive-accuracy { display: inline-flex; padding: 4px 10px; border: 1px solid var(--bg-tertiary); border-radius: 8px; font-size: 0.78rem; }
 .archive-result-win { color: #4ade80; background: rgba(34, 197, 94, 0.1); }
-.archive-result-loss { color: var(--solar-gold); background: rgba(245, 158, 11, 0.1); }
+.archive-result-loss { color: #f87171; background: rgba(239, 68, 68, 0.1); }
 .archive-result-draw { color: var(--text-secondary); background: var(--bg-tertiary); }
 .archive-accuracies { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
-.archive-accuracy { align-items: center; gap: 6px; padding: 5px 9px 5px 5px; border-radius: 999px; background: rgba(148, 163, 184, 0.06); color: var(--text-secondary); }
+.archive-accuracy { align-items: center; gap: 6px; max-width: 100%; padding: 5px 9px 5px 5px; border-radius: 999px; background: rgba(148, 163, 184, 0.06); color: var(--text-secondary); }
+.archive-accuracy > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.archive-accuracy.is-player-accuracy { position: relative; isolation: isolate; border-color: rgba(245, 158, 11, 0.65); box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
+/* The fixed mask clips a composited rotating gradient to the one-pixel contour. */
+.accuracy-solar-border { position: absolute; inset: -1px; padding: 1px; border-radius: inherit; overflow: hidden; pointer-events: none; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.accuracy-solar-border::before { content: ''; position: absolute; top: 50%; left: 50%; width: 200%; aspect-ratio: 1; background: conic-gradient(#ffffff, #fef08a, #f59e0b, #ea580c, #ffffff); transform: translate3d(-50%, -50%, 0) rotate(0turn); will-change: transform; animation: archive-accuracy-orbit 2.8s linear infinite; }
+@keyframes archive-accuracy-orbit {
+  from { transform: translate3d(-50%, -50%, 0) rotate(0turn); }
+  to { transform: translate3d(-50%, -50%, 0) rotate(1turn); }
+}
 .archive-accuracy strong { color: var(--accuracy-color); font-variant-numeric: tabular-nums; font-weight: 750; }
 .accuracy-gold { --accuracy-color: #fbbf24; }
 .accuracy-emerald { --accuracy-color: #34d399; }
@@ -6456,7 +6469,7 @@ body.history-active #app { max-width: none; }
 .accuracy-progress { stroke: var(--accuracy-color); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 14px 14px; }
 .accuracy-side { width: 8px; height: 8px; flex: 0 0 8px; border: 1px solid #94a3b8; border-radius: 50%; background: #f8fafc; }
 .archive-accuracy-black .accuracy-side { background: #0f172a; }
-.archive-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.archive-actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: auto; }
 .archive-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 0.82rem; }
 .archive-actions svg, .archive-empty svg { width: 18px; height: 18px; flex-shrink: 0; pointer-events: none; }
 .archive-actions .btn-favorite { width: 44px; padding: 10px; margin-left: auto; background: transparent; }
@@ -6470,13 +6483,18 @@ body.history-active #app { max-width: none; }
 .archive-clipboard { position: fixed; left: -9999px; }
 .archive-center button:focus-visible, #history-back:focus-visible { outline: 2px solid var(--solar-gold); outline-offset: 3px; }
 [data-theme='light'] .archive-result-win { color: #166534; }
+[data-theme='light'] .archive-result-loss { color: #b91c1c; }
 [data-theme='light'] .accuracy-gold { --accuracy-color: #b45309; }
 [data-theme='light'] .accuracy-emerald { --accuracy-color: #047857; }
 .archive-center[data-instant-motion='true'] .archive-card { animation: none !important; transition: none !important; }
-@media (max-width: 720px) {
+.archive-center[data-instant-motion='true'] .accuracy-solar-border::before { animation: none !important; will-change: auto; }
+@media (max-width: 1000px) {
   .archive-list { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
   .screen-history { padding: 76px 12px 24px; }
-  .archive-card { padding: 20px 16px; }
+  .archive-card { gap: 12px; padding: 20px 16px; }
+  .archive-actions button { padding: 10px; }
 }
 
 /* Solar Chess Background (SVG & CSS fullscreen layer, behind all content) */
@@ -7840,6 +7858,7 @@ body:has(#screen-analysis.active) #app {
   .home-title-wrapper {
     transform: translate(-50%, -50%) !important;
   }
+  .accuracy-solar-border::before { animation: none !important; will-change: auto; }
   /* Home dropdown switches instantly: no fade, slide or chevron rotation animation */
   .main-menu-trigger,
   .main-menu-chevron,
