@@ -1,7 +1,8 @@
 import { ChessStore } from '@/state/store';
 import { APP_NAME } from '@/config';
 import { ChessBoardUI } from './board';
-import { exportPGN, type Square } from '@/core';
+import { exportPGN, moveToSAN, type Square } from '@/core';
+import { solarAudio } from '@/audio/solar-audio';
 import {
   exportReviewedPGN,
   getMoveClassMeta,
@@ -60,6 +61,8 @@ export class ReviewPanelUI {
   private bestMoveToast: HTMLElement | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private isBestMoveLoading = false;
+  private lastReplayGameId: string | null = null;
+  private lastReplayPly = -1;
 
   // DOM elements
   private cancelBtn!: HTMLButtonElement;
@@ -546,6 +549,7 @@ export class ReviewPanelUI {
   }
 
   private render(): void {
+    this.playReplayNavigationSound();
     if (!this.navContainer) {
       const navSlot = document.getElementById('review-board-nav');
       if (navSlot) {
@@ -694,6 +698,31 @@ export class ReviewPanelUI {
         this.openingBadgeEl.style.display = 'none';
       }
     }
+  }
+
+  private playReplayNavigationSound(): void {
+    if (!this.store.isReplayMode()) {
+      this.lastReplayGameId = null;
+      this.lastReplayPly = -1;
+      return;
+    }
+    const state = this.store.getLiveState();
+    const ply = this.store.getViewIndex() ?? state.history.length - 1;
+    const gameId = this.store.getGameId();
+    // Opening Replay and repeated notifications must not replay the final move.
+    if (gameId !== this.lastReplayGameId) {
+      this.lastReplayGameId = gameId;
+      this.lastReplayPly = ply;
+      return;
+    }
+    if (ply === this.lastReplayPly) return;
+    this.lastReplayPly = ply;
+    const move = state.history[ply];
+    if (!move) return;
+    const san = moveToSAN(this.store.getStateAtPly(ply - 1), move);
+    if (san.includes('+') || san.includes('#')) solarAudio.playCheck();
+    else if (san.includes('x')) solarAudio.playCapture();
+    else solarAudio.playMove();
   }
 
   private renderEvalGraph(review: GameReviewResult): void {

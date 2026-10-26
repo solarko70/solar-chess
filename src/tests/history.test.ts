@@ -17,7 +17,7 @@ const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 function record(id = 'game-1', result: GameRecord['result'] = 'win', timestamp = 1000): GameRecord {
   return {
-    id, timestamp, dateFormatted: '25.10.2026, 12:30', mode: 'pvp', opponentTitle: 'Локальный игрок',
+    id, timestamp, dateFormatted: '25.10.2026, 12:30', mode: 'pvp', variant: 'standard', opponentTitle: 'Локальный игрок',
     playerColor: 'white', timeControl: '3+2', result, reason: 'resignation', movesCount: 2,
     pgn: '[Result "1-0"]\n\n1. e4 e5 2. Nf3 1-0',
     finalFen: FINAL_FEN, isFavorite: false,
@@ -28,6 +28,29 @@ beforeEach(() => { localStorage.clear(); });
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); localStorage.clear(); });
 
 describe('Game history storage', () => {
+  it('migrates variant fields from notation or winning reasons and persists them once', () => {
+    localStorage.setItem(GAME_HISTORY_STORAGE_KEY, JSON.stringify([
+      { ...record('classic'), variant: undefined },
+      { ...record('hill'), variant: undefined, reason: 'kingOfTheHill' },
+      { ...record('checks'), variant: undefined, reason: 'resignation', pgn: '[Variant "Three-check"]\n1. e4 e5 *' },
+    ]));
+    expect(getGameById('classic')?.variant).toBe('standard');
+    expect(getGameById('hill')?.variant).toBe('king-of-the-hill');
+    expect(getGameById('checks')?.variant).toBe('three-check');
+    const saved = JSON.parse(localStorage.getItem(GAME_HISTORY_STORAGE_KEY)!) as GameRecord[];
+    expect(saved.every((game) => typeof game.variant === 'string')).toBe(true);
+    const write = vi.spyOn(Storage.prototype, 'setItem');
+    getGameHistory();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('retains the variant during metadata updates and rejects unknown variant IDs', () => {
+    saveGameToHistory({ ...record(), variant: 'three-check' });
+    saveGameToHistory({ ...record(), variant: undefined, whiteAccuracy: 90 });
+    expect(getGameById('game-1')?.variant).toBe('three-check');
+    localStorage.setItem(GAME_HISTORY_STORAGE_KEY, JSON.stringify([{ ...record(), variant: '<script>' }]));
+    expect(getGameHistory()).toEqual([]);
+  });
   it('saves, retrieves, updates and deletes records by ID', () => {
     const game = record();
     saveGameToHistory(game);
@@ -147,6 +170,22 @@ describe('Game history autosave', () => {
   });
   afterEach(() => { unsubscribe(); store.cancelReview(); });
 
+  it.each(['standard', 'king-of-the-hill', 'three-check'] as const)('saves %s even on resignation', (variant) => {
+    store.newGame(undefined, { variant });
+    store.resign('black');
+    expect(getGameById(store.getGameId())?.variant).toBe(variant);
+    expect(JSON.parse(localStorage.getItem(GAME_HISTORY_STORAGE_KEY)!)[0].variant).toBe(variant);
+  });
+
+  it('does not resurrect games after clearing the archive and completing a review', () => {
+    store.resign('black');
+    clearAllHistory();
+    const review = { accuracy: { white: 90, black: 80 }, moves: [], counts: { white: {}, black: {} } } as unknown as ReviewRunResult;
+    store.setReviewResult(review);
+    expect(getGameHistory()).toEqual([]);
+    expect(localStorage.getItem(GAME_HISTORY_STORAGE_KEY)).toBeNull();
+  });
+
   it('saves checkmate once with the correct PGN result and a stable game ID', () => {
     const id = store.getGameId();
     for (const [from, to] of [[53, 45], [12, 28], [54, 38], [3, 39]]) {
@@ -237,6 +276,92 @@ describe('Game history screen', () => {
     screen = new HistoryArchiveUI(container, { onBack: vi.fn(), onReview });
   });
   afterEach(() => { screen.destroy(); container.remove(); stylesheet.remove(); });
+
+  it.each([
+    ['standard', 'Классика'], ['king-of-the-hill', 'Царь горы'], ['three-check', 'Три шаха'],
+  ] as const)('renders the %s badge beside the result', (variant, label) => {
+    saveGameToHistory({ ...record(), variant });
+    screen.refresh();
+    const badge = container.querySelector('.history-card-header .card-variant-badge')!;
+    expect(badge.textContent).toBe(label);
+    expect(badge.getAttribute('data-variant')).toBe(variant);
+    expect(badge.previousElementSibling?.classList.contains('card-badge')).toBe(true);
+  });
+
+  it('disables clearing an empty archive and keeps records when confirmation is cancelled', () => {
+    const clear = container.querySelector<HTMLButtonElement>('#clear-history-btn')!;
+    expect(clear.closest('.history-filters-row')).not.toBeNull();
+    expect(clear.disabled).toBe(true);
+    clear.click();
+    expect(container.querySelector('.confirm-modal')).toBeNull();
+    saveGameToHistory(record());
+    screen.refresh();
+    expect(clear.disabled).toBe(false);
+    clear.focus();
+    clear.click();
+    const dialog = container.querySelector('.confirm-modal')!;
+    expect(dialog.getAttribute('role')).toBe('alertdialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.querySelector('h2')?.textContent).toBe('Очистить архив партий?');
+    expect(dialog.textContent).toContain('без возможности восстановления');
+    expect(container.querySelector('.archive-center')?.hasAttribute('inert')).toBe(true);
+    expect(document.activeElement).toBe(dialog.querySelector('[data-history-confirm="cancel"]'));
+    dialog.querySelector<HTMLButtonElement>('[data-history-confirm="cancel"]')!.click();
+    expect(container.querySelector('.confirm-modal')).toBeNull();
+    expect(getGameHistory()).toHaveLength(1);
+    expect(container.querySelector('.archive-center')?.hasAttribute('inert')).toBe(false);
+    expect(document.activeElement).toBe(clear);
+  });
+
+  it('traps confirmation focus and closes via Escape or the backdrop without deleting', () => {
+    saveGameToHistory(record());
+    screen.refresh();
+    const clear = container.querySelector<HTMLButtonElement>('#clear-history-btn')!;
+    clear.click();
+    const cancel = container.querySelector<HTMLButtonElement>('[data-history-confirm="cancel"]')!;
+    const confirm = container.querySelector<HTMLButtonElement>('.btn-danger-confirm')!;
+    cancel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(confirm);
+    confirm.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(cancel);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(container.querySelector('.confirm-modal')).toBeNull();
+    clear.click();
+    container.querySelector<HTMLElement>('.confirm-modal')!.click();
+    expect(container.querySelector('.confirm-modal')).toBeNull();
+    clear.click();
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(container.querySelector('.confirm-modal')).toBeNull();
+    expect(getGameHistory()).toHaveLength(1);
+  });
+
+  it('clears every record and statistic after confirmation, including filtered out games', () => {
+    localStorage.setItem('other-setting', 'kept');
+    saveGameToHistory({ ...record('win'), isFavorite: true, whiteAccuracy: 99, whiteElo: 2400 });
+    saveGameToHistory(record('loss', 'loss'));
+    screen.refresh();
+    container.querySelector<HTMLButtonElement>('[data-history-filter="win"]')!.click();
+    expect(container.querySelectorAll('.archive-card')).toHaveLength(1);
+    container.querySelector<HTMLButtonElement>('#clear-history-btn')!.click();
+    expect(getGameHistory()).toHaveLength(2);
+    container.querySelector<HTMLButtonElement>('.btn-danger-confirm')!.click();
+    expect(getGameHistory()).toEqual([]);
+    expect(localStorage.getItem(GAME_HISTORY_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem('other-setting')).toBe('kept');
+    expect(container.querySelector('.archive-card, .confirm-modal')).toBeNull();
+    expect(container.textContent).toContain('Пока нет завершённых партий');
+    expect(container.querySelector<HTMLButtonElement>('#clear-history-btn')?.disabled).toBe(true);
+  });
+
+  it('keeps the confirmation open and reports failed storage deletion', () => {
+    saveGameToHistory(record());
+    screen.refresh();
+    container.querySelector<HTMLButtonElement>('#clear-history-btn')!.click();
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('Denied'); });
+    container.querySelector<HTMLButtonElement>('.btn-danger-confirm')!.click();
+    expect(getGameHistory()).toHaveLength(1);
+    expect(container.querySelector('.confirm-modal [role="alert"]')?.textContent).toContain('Не удалось очистить архив');
+  });
 
   it('shows the empty state and all result filters', () => {
     expect(container.textContent).toContain('Пока нет завершённых партий. Сыграйте с ботом или другом!');

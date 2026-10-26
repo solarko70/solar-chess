@@ -1,10 +1,11 @@
-import { classicalRuleSet, parsePGN, serializeFEN } from '@/core';
+import { classicalRuleSet, parsePGN, serializeFEN, type VariantId } from '@/core';
 
 export interface GameRecord {
   id: string;
   timestamp: number;
   dateFormatted: string;
   mode: 'bot' | 'pvp';
+  variant: VariantId;
   opponentTitle: string;
   playerColor: 'white' | 'black';
   timeControl: string;
@@ -20,6 +21,8 @@ export interface GameRecord {
   blackElo?: number;
 }
 
+export type GameRecordInput = Omit<GameRecord, 'variant'> & { variant?: VariantId };
+
 export const GAME_HISTORY_STORAGE_KEY = 'solar_chess_game_history';
 const HISTORY_LIMIT = 100;
 const INITIAL_FEN = serializeFEN(classicalRuleSet.getInitialState());
@@ -30,7 +33,15 @@ function hasValidFen(fen: unknown): fen is string {
     [...rank].reduce((width, square) => width + (/[1-8]/.test(square) ? Number(square) : 1), 0) === 8);
 }
 
-function normalizeRecord(record: GameRecord): GameRecord {
+function normalizeRecord(record: GameRecordInput): GameRecord {
+  let variant = record.variant;
+  if (!variant) {
+    const pgnVariant = record.pgn.match(/^\s*\[Variant\s+"([^"]+)"\]/im)?.[1].toLowerCase();
+    variant = pgnVariant === 'king of the hill' || record.reason === 'kingOfTheHill' || record.reason === 'king-of-the-hill-center'
+      ? 'king-of-the-hill'
+      : pgnVariant === 'three-check' || record.reason === 'threeCheck' || record.reason === 'three-check-win' || record.reason === 'three-check-limit'
+        ? 'three-check' : 'standard';
+  }
   let finalFen = record.finalFen;
   if (!hasValidFen(finalFen)) {
     try {
@@ -40,10 +51,10 @@ function normalizeRecord(record: GameRecord): GameRecord {
       finalFen = INITIAL_FEN;
     }
   }
-  return { ...record, finalFen, isFavorite: record.isFavorite === true };
+  return { ...record, variant, finalFen, isFavorite: record.isFavorite === true };
 }
 
-function isGameRecord(value: unknown): value is GameRecord {
+function isGameRecord(value: unknown): value is GameRecordInput {
   if (!value || typeof value !== 'object') return false;
   const item = value as Record<string, unknown>;
   return ['id', 'dateFormatted', 'opponentTitle', 'timeControl', 'reason', 'pgn']
@@ -51,6 +62,7 @@ function isGameRecord(value: unknown): value is GameRecord {
     typeof item.timestamp === 'number' && Number.isFinite(new Date(item.timestamp).getTime()) &&
     typeof item.movesCount === 'number' && Number.isInteger(item.movesCount) && item.movesCount >= 0 &&
     (item.mode === 'bot' || item.mode === 'pvp') &&
+    (item.variant === undefined || ['standard', 'king-of-the-hill', 'three-check'].includes(String(item.variant))) &&
     (item.playerColor === 'white' || item.playerColor === 'black') &&
     ['win', 'loss', 'draw'].includes(String(item.result)) &&
     ['whiteAccuracy', 'blackAccuracy', 'whiteElo', 'blackElo'].every((key) =>
@@ -71,7 +83,7 @@ export function getGameHistory(): GameRecord[] {
     let migrated = false;
     const normalized = records.map((record) => {
       const next = normalizeRecord(record);
-      if (next.finalFen !== record.finalFen || next.isFavorite !== record.isFavorite) migrated = true;
+      if (next.variant !== record.variant || next.finalFen !== record.finalFen || next.isFavorite !== record.isFavorite) migrated = true;
       return next;
     });
     // Persist migration once so subsequent filtering does not replay every PGN.
@@ -92,12 +104,13 @@ function writeHistory(records: GameRecord[]): boolean {
   }
 }
 
-export function saveGameToHistory(record: GameRecord): void {
+export function saveGameToHistory(record: GameRecordInput): void {
   if (!isGameRecord(record)) return;
   const history = getGameHistory();
   const existing = history.find((item) => item.id === record.id);
   const records = history.filter((item) => item.id !== record.id);
   records.unshift(normalizeRecord({ ...record,
+    variant: record.variant ?? (record.pgn === existing?.pgn ? existing.variant : undefined),
     isFavorite: record.isFavorite ?? existing?.isFavorite ?? false,
     finalFen: record.finalFen ?? (record.pgn === existing?.pgn ? existing.finalFen : undefined),
   }));

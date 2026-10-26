@@ -159,6 +159,33 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
     expect(background.querySelector('.variants-space-stars')).not.toBeNull();
   });
 
+  it.each(['white', 'random', 'black'] as const)('selects %s through its SVG card and preserves match settings', (color) => {
+    document.getElementById('btn-play-variants')!.click();
+    const open = () => document.querySelector<HTMLButtonElement>('[data-play-variant="three-check"]')!.click();
+    open();
+    let modal = document.getElementById('variant-setup-modal')!;
+    modal.querySelector<HTMLButtonElement>('[data-opponent="pvp"]')!.click();
+    expect(modal.querySelectorAll('#variant-color-group [data-color] svg')).toHaveLength(3);
+    expect(modal.querySelectorAll('#variant-time-group [data-time] svg')).toHaveLength(4);
+    expect(modal.querySelectorAll('#variant-level-group .variant-rating-badge')).toHaveLength(6);
+    modal.querySelector(`[data-color="${color}"] svg`)!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal.querySelector(`[data-color="${color}"]`)?.getAttribute('aria-pressed')).toBe('true');
+    expect(modal.querySelectorAll('#variant-color-group .active')).toHaveLength(1);
+    modal.querySelector<HTMLButtonElement>('[data-time="blitz-3-2"]')!.click();
+    expect(modal.querySelector('[data-time="blitz-3-2"]')?.getAttribute('aria-pressed')).toBe('true');
+    modal.querySelector<HTMLButtonElement>('#variant-cancel-btn')!.click();
+    open();
+    modal = document.getElementById('variant-setup-modal')!;
+    expect(modal.querySelector(`#variant-color-group [data-color="${color}"]`)?.getAttribute('aria-pressed')).toBe('true');
+    expect(modal.querySelector('[data-time="blitz-3-2"]')?.classList.contains('active')).toBe(true);
+    modal.querySelector<HTMLButtonElement>('#btn-variant-start')!.click();
+    expect(globalStore.getPlayerColorChoice()).toBe(color);
+    expect(globalStore.getClockMode()).toBe('blitz-3-2');
+    expect(globalStore.getGameMode()).toBe('pvp');
+    expect(globalStore.getLiveState().variant).toBe('three-check');
+  });
+
   it('offers six bot levels and starts each with the corresponding engine level', () => {
     const levels = [
       ['novice', 'Новичок', '600'], ['amateur', 'Любитель', '1000'],

@@ -5,7 +5,8 @@ import { ChessStore } from '@/state/store'
 import { ChessBoardUI } from '@/ui/board'
 import { ReviewPanelUI, retriggerStellarAnimation } from '@/ui/reviewpanel'
 import { HistoryUI } from '@/ui/history'
-import { generateLegal } from '@/core'
+import { generateLegal, parseFEN } from '@/core'
+import { solarAudio } from '@/audio/solar-audio'
 import type { AnalysisEngineResult, GameReviewResult, MoveClass } from '@/analysis'
 import {
   estimatePerformanceRating,
@@ -13,6 +14,106 @@ import {
   moveAccuracy,
   gameAccuracy,
 } from '@/analysis'
+
+describe('Stage 13e: variant Replay audio', () => {
+  let store: ChessStore
+  let panel: ReviewPanelUI
+  let board: ChessBoardUI
+  let history: HistoryUI
+  let previousTheme: ReturnType<typeof solarAudio.getSoundTheme>
+
+  const prepare = (variant: 'king-of-the-hill' | 'three-check', fen?: string) => {
+    document.body.innerHTML = '<div id="audio-board"></div><div id="audio-history"></div><nav id="review-board-nav"></nav><div id="audio-panel"></div>'
+    store = new ChessStore()
+    store.newGame(fen ? parseFEN(fen, 8, 8, variant) : undefined, { variant })
+    if (fen) expect(store.makeMove(51, 52)).toBe(true)
+    else {
+      for (const [from, to] of [[52, 36], [11, 27], [36, 27], [3, 27], [57, 42], [27, 28]]) {
+        expect(store.makeMove(from, to)).toBe(true)
+      }
+    }
+    store.resign(store.getLiveState().turn)
+    board = new ChessBoardUI(document.getElementById('audio-board')!, store)
+    history = new HistoryUI(document.getElementById('audio-history')!, store, () => store.isReviewMode())
+    panel = new ReviewPanelUI(document.getElementById('audio-panel')!, store)
+  }
+
+  beforeEach(() => { previousTheme = solarAudio.getSoundTheme() })
+  afterEach(() => {
+    panel?.destroy()
+    history?.destroy()
+    board?.destroy()
+    vi.restoreAllMocks()
+    solarAudio.setSoundTheme(previousTheme)
+    document.body.innerHTML = ''
+  })
+
+  const cases = (['king-of-the-hill', 'three-check'] as const).flatMap((variant) =>
+    (['classic', 'cosmic'] as const).map((theme) => ({ variant, theme })))
+
+  it.each(cases)('plays each $variant move once through the $theme theme', async ({ variant, theme }) => {
+    prepare(variant)
+    solarAudio.setSoundTheme(theme)
+    const move = vi.spyOn(solarAudio.themes[theme], 'playMove').mockImplementation(() => {})
+    const capture = vi.spyOn(solarAudio.themes[theme], 'playCapture').mockImplementation(() => {})
+    const check = vi.spyOn(solarAudio.themes[theme], 'playCheck').mockImplementation(() => {})
+    const other = theme === 'classic' ? 'cosmic' : 'classic'
+    const otherMove = vi.spyOn(solarAudio.themes[other], 'playMove').mockImplementation(() => {})
+    await panel.startReview()
+    expect(move).not.toHaveBeenCalled()
+    expect(capture).not.toHaveBeenCalled()
+    expect(check).not.toHaveBeenCalled()
+    for (let i = 0; i < 6; i++) document.getElementById('review-nav-next')!.click()
+    expect(move).toHaveBeenCalledTimes(3)
+    expect(capture).toHaveBeenCalledTimes(2)
+    expect(check).toHaveBeenCalledOnce()
+    expect(otherMove).not.toHaveBeenCalled()
+    expect(store.getReviewResult()).toBeNull()
+    expect(store.isReplayMode()).toBe(true)
+  })
+
+  it.each(['king-of-the-hill', 'three-check'] as const)('plays %s clicks and keyboard navigation without duplicate sounds', async (variant) => {
+    prepare(variant)
+    const move = vi.spyOn(solarAudio, 'playMove').mockImplementation(() => {})
+    const capture = vi.spyOn(solarAudio, 'playCapture').mockImplementation(() => {})
+    const check = vi.spyOn(solarAudio, 'playCheck').mockImplementation(() => {})
+    await panel.startReview()
+    document.querySelector<HTMLElement>('#audio-history [data-move-index="2"]')!.click()
+    expect(capture).toHaveBeenCalledOnce()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    expect(capture).toHaveBeenCalledTimes(2)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    expect(move).toHaveBeenCalledOnce()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+    expect(capture).toHaveBeenCalledTimes(3)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
+    expect(check).toHaveBeenCalledOnce()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
+    store.selectSquare(null)
+    store.setViewIndex(5)
+    expect(check).toHaveBeenCalledOnce()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
+    expect(move).toHaveBeenCalledOnce()
+    expect(capture).toHaveBeenCalledTimes(3)
+    expect(check).toHaveBeenCalledOnce()
+    store.setReviewMode(false)
+    store.setViewIndex(null)
+    await panel.startReview()
+    expect(check).toHaveBeenCalledOnce()
+  })
+
+  it.each(['king-of-the-hill', 'three-check'] as const)('prioritizes check over capture in %s Replay', async (variant) => {
+    prepare(variant, '4k3/8/8/8/8/8/3Rp3/K7 w - - 0 1')
+    const move = vi.spyOn(solarAudio, 'playMove').mockImplementation(() => {})
+    const capture = vi.spyOn(solarAudio, 'playCapture').mockImplementation(() => {})
+    const check = vi.spyOn(solarAudio, 'playCheck').mockImplementation(() => {})
+    await panel.startReview()
+    panel.goToMove(0)
+    expect(check).toHaveBeenCalledOnce()
+    expect(capture).not.toHaveBeenCalled()
+    expect(move).not.toHaveBeenCalled()
+  })
+})
 
 describe('Stricter review performance rating', () => {
   it.each([

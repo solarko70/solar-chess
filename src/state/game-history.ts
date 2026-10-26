@@ -19,6 +19,7 @@ function createRecord(store: ChessStore): GameRecord {
     id: store.getGameId(), timestamp,
     dateFormatted: new Date(timestamp).toLocaleString('ru-RU'),
     mode: bot ? 'bot' : 'pvp', opponentTitle, playerColor,
+    variant: store.getLiveState().variant ?? 'standard',
     timeControl: clock.initialMs ? `${clock.initialMs / 60000}+${clock.incrementMs / 1000}` : 'Без часов',
     result: winner ? (winner === playerColor ? 'win' : 'loss') : 'draw',
     reason: store.getTimedOutLoser() ? 'timeout' : store.getResignedPlayer() ? 'resignation' :

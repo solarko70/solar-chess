@@ -1,6 +1,7 @@
 import type { VariantId } from '@/core';
 import type { LevelId } from '@/ai';
 import type { GameMode, PlayerColorChoice, TimeControlMode } from '@/state/store';
+import { getPieceSvg } from './pieces';
 
 export type VariantsTabId = 'popular' | 'fairy' | 'solar';
 
@@ -35,14 +36,17 @@ const ICON_FOG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const ICON_GRID = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>`;
 const ICON_EDITOR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 const ICON_SOLAR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>`;
+const ICON_BALANCE = `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M24 6v34M10 41h28M8 14h32M14 14l-8 15h16l-8-15Zm20 0-8 15h16l-8-15Z"/><path d="M6 29a8 8 0 0 0 16 0m4 0a8 8 0 0 0 16 0"/><circle cx="24" cy="10" r="3" fill="currentColor" stroke="none"/></svg>`;
+const ICON_INFINITY = `<svg viewBox="0 0 32 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M16 12C10 2 2 4 2 12s8 10 14 0 14-8 14 0-8 10-14 0Z"/></svg>`;
+const ICON_TIMER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="14" r="8"/><path d="M9 2h6M12 2v4m6 2 2-2M12 10v5l3 2"/></svg>`;
 
 const VARIANT_BOT_LEVELS = [
-  { id: 'novice', name: 'Новичок', rating: '600' },
-  { id: 'amateur', name: 'Любитель', rating: '1000' },
-  { id: 'club', name: 'Клубный', rating: '1400' },
-  { id: 'expert', name: 'Эксперт', rating: '1800' },
-  { id: 'master', name: 'Мастер', rating: '2200' },
-  { id: 'singularity', name: 'Сингулярность', rating: '2600+' },
+  { id: 'novice', name: 'Новичок', rating: '600', description: 'Первые шаги' },
+  { id: 'amateur', name: 'Любитель', rating: '1000', description: 'Простые комбинации' },
+  { id: 'club', name: 'Клубный', rating: '1400', description: 'Тактика и защита' },
+  { id: 'expert', name: 'Эксперт', rating: '1800', description: 'Глубокий расчёт' },
+  { id: 'master', name: 'Мастер', rating: '2200', description: 'Точная стратегия' },
+  { id: 'singularity', name: 'Сингулярность', rating: '2600+', description: 'Предельная глубина' },
 ] as const;
 
 const VARIANTS_SPACE_BACKGROUND = `
@@ -224,26 +228,26 @@ export class VariantSetupModal {
           <div class="setup-section" id="variant-bot-level-section">
             <label class="setup-label">Уровень бота</label>
             <div class="variant-segmented-row variant-level-grid" id="variant-level-group" role="group" aria-label="Уровень бота">
-              ${VARIANT_BOT_LEVELS.map((bot) => `<button type="button" class="variant-seg-btn variant-level-card" data-bot-level="${bot.id}" aria-pressed="false"><span>${bot.name}</span><strong>${bot.rating}</strong></button>`).join('')}
+              ${VARIANT_BOT_LEVELS.map((bot) => `<button type="button" class="variant-seg-btn variant-level-card" data-bot-level="${bot.id}" aria-pressed="false"><strong class="variant-rating-badge">${bot.rating}</strong><span class="variant-level-name">${bot.name}</span><span class="variant-level-desc">${bot.description}</span></button>`).join('')}
             </div>
           </div>
 
           <div class="setup-section" id="variant-color-section">
             <label class="setup-label">Выбор цвета</label>
-            <div class="variant-segmented-row" id="variant-color-group">
-              <button type="button" class="variant-seg-btn active" data-color="white">Белые</button>
-              <button type="button" class="variant-seg-btn" data-color="random">Случайно</button>
-              <button type="button" class="variant-seg-btn" data-color="black">Чёрные</button>
+            <div class="variant-segmented-row variant-color-grid" id="variant-color-group" role="group" aria-label="Цвет фигур">
+              <button type="button" class="variant-seg-btn variant-color-card active" data-color="white"><span class="variant-color-icon" aria-hidden="true">${getPieceSvg('king', 'white')}</span><span>Белые</span></button>
+              <button type="button" class="variant-seg-btn variant-color-card" data-color="random"><span class="variant-color-icon variant-color-balance" aria-hidden="true">${ICON_BALANCE}</span><span>Случайно</span></button>
+              <button type="button" class="variant-seg-btn variant-color-card" data-color="black"><span class="variant-color-icon" aria-hidden="true">${getPieceSvg('king', 'black')}</span><span>Чёрные</span></button>
             </div>
           </div>
 
           <div class="setup-section">
             <label class="setup-label">Контроль времени</label>
-            <div class="variant-segmented-row" id="variant-time-group">
-              <button type="button" class="variant-seg-btn active" data-time="none">Без часов</button>
-              <button type="button" class="variant-seg-btn" data-time="bullet-1-0">1+0</button>
-              <button type="button" class="variant-seg-btn" data-time="blitz-3-2">3+2</button>
-              <button type="button" class="variant-seg-btn" data-time="rapid-10-0">10+0</button>
+            <div class="variant-segmented-row variant-time-grid" id="variant-time-group" role="group" aria-label="Контроль времени">
+              <button type="button" class="variant-seg-btn variant-time-card active" data-time="none">${ICON_INFINITY}<span>Без часов</span><small>Свободный темп</small></button>
+              <button type="button" class="variant-seg-btn variant-time-card" data-time="bullet-1-0">${ICON_THREE_CHECK}<span>1+0</span><small>Пуля</small></button>
+              <button type="button" class="variant-seg-btn variant-time-card" data-time="blitz-3-2">${ICON_TIMER}<span>3+2</span><small>Блиц</small></button>
+              <button type="button" class="variant-seg-btn variant-time-card" data-time="rapid-10-0">${ICON_TIMER}<span>10+0</span><small>Рапид</small></button>
             </div>
           </div>
         </div>
@@ -291,7 +295,7 @@ export class VariantSetupModal {
       });
     });
 
-    this.overlay.querySelectorAll<HTMLButtonElement>('[data-color]').forEach((btn) => {
+    this.overlay.querySelectorAll<HTMLButtonElement>('button[data-color]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const color = btn.getAttribute('data-color') as PlayerColorChoice | null;
         if (color) {
@@ -334,7 +338,9 @@ export class VariantSetupModal {
     }
 
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-opponent]').forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-opponent') === this.opponent);
+      const active = btn.getAttribute('data-opponent') === this.opponent;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
     });
 
     const botSection = this.overlay.querySelector<HTMLElement>('#variant-bot-level-section');
@@ -348,12 +354,16 @@ export class VariantSetupModal {
       btn.setAttribute('aria-pressed', String(active));
     });
 
-    this.overlay.querySelectorAll<HTMLButtonElement>('[data-color]').forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-color') === this.playerColor);
+    this.overlay.querySelectorAll<HTMLButtonElement>('button[data-color]').forEach((btn) => {
+      const active = btn.getAttribute('data-color') === this.playerColor;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
     });
 
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-time]').forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-time') === this.timeControl);
+      const active = btn.getAttribute('data-time') === this.timeControl;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
     });
   }
 

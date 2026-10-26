@@ -19,8 +19,7 @@ export class ArchivedGameReviewUI {
   private previousFocus = document.activeElement as HTMLElement | null;
 
   constructor(private overlay: HTMLElement, record: GameRecord, private onClose: () => void) {
-    if (record.reason === 'kingOfTheHill') this.store.setVariant('king-of-the-hill');
-    if (record.reason === 'threeCheck') this.store.setVariant('three-check');
+    this.store.setVariant(record.variant);
     if (!this.store.loadPGN(record.pgn)) throw new Error('Invalid archived PGN');
     this.store.setActiveGame(false);
     this.store.setReviewMode(true);

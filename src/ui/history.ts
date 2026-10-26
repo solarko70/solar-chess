@@ -3,7 +3,7 @@ import { moveToSAN, classicalRuleSet, parseFEN, serializeFEN, type PieceType } f
 import { scoreToCp, getMoveClassMeta, identifyOpening } from '@/analysis';
 import { solarAudio } from '@/audio/solar-audio';
 import { triggerReviewMoveEffects } from './reviewpanel';
-import { deleteGameFromHistory, getGameHistory, toggleFavorite, type GameRecord } from '@/storage/history';
+import { clearAllHistory, deleteGameFromHistory, getGameHistory, toggleFavorite, type GameRecord } from '@/storage/history';
 import { t } from '@/i18n';
 import { getPieceSvg, PIECE_SYMBOLS } from './pieces';
 
@@ -61,6 +61,8 @@ export class HistoryArchiveUI {
   private toast: HTMLElement;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private events = new AbortController();
+  private confirmModal: HTMLElement | null = null;
+  private confirmPreviousFocus: HTMLElement | null = null;
 
   constructor(private container: HTMLElement, private options: HistoryArchiveOptions) {
     const instantMotion = (typeof process !== 'undefined' && process.env?.VITEST === 'true') ||
@@ -72,9 +74,12 @@ export class HistoryArchiveUI {
         <p class="settings-eyebrow">SOLAR CHESS / PGN</p>
         <h1>${t('history.title')}</h1><p class="settings-intro">${t('history.intro')}</p>
       </header>
+      <div class="history-filters-row">
       <div class="archive-filters" role="group" aria-label="${t('history.title')}">
         ${(['all', 'win', 'loss', 'draw', 'favorites'] as const).map((value, index) =>
           `<button type="button" class="solar-btn-ghost filter-btn" data-filter="${value}" data-history-filter="${value}" aria-pressed="${index === 0}">${t(['history.all', 'history.wins', 'history.losses', 'history.draws', 'history.favorites'][index])}</button>`).join('')}
+      </div>
+      <button type="button" id="clear-history-btn" class="solar-btn-ghost clear-history-btn" disabled>${archiveIcon('delete')}<span>Очистить всё</span></button>
       </div>
       <div class="archive-list" aria-live="polite"></div>
       <div class="archive-toast solar-card" role="status" hidden></div>
@@ -82,6 +87,8 @@ export class HistoryArchiveUI {
     this.list = container.querySelector('.archive-list')!;
     this.toast = container.querySelector('.archive-toast')!;
     container.addEventListener('click', this.handleClick, { signal: this.events.signal });
+    document.addEventListener('keydown', this.handleConfirmKeydown, { signal: this.events.signal });
+    window.addEventListener('hashchange', () => this.closeClearConfirmation(), { signal: this.events.signal });
     this.refresh();
   }
 
@@ -90,6 +97,7 @@ export class HistoryArchiveUI {
     const focusedId = focused?.closest<HTMLElement>('.archive-card')?.dataset.gameId;
     const focusedAction = focused?.dataset.historyAction;
     const records = getGameHistory();
+    this.container.querySelector<HTMLButtonElement>('#clear-history-btn')!.disabled = records.length === 0;
     const visible = records.filter((record) => this.filter === 'all' ||
       (this.filter === 'favorites' ? record.isFavorite === true : record.result === this.filter));
     this.list.replaceChildren();
@@ -120,6 +128,9 @@ export class HistoryArchiveUI {
     }).join('');
     card.innerHTML = `<header class="history-card-header">
       <span class="card-badge archive-result archive-result-${record.result}">${t(`history.${record.result}`)}</span>
+      <span class="card-variant-badge variant-${record.variant}" data-variant="${record.variant}">${{
+        standard: 'Классика', 'king-of-the-hill': 'Царь горы', 'three-check': 'Три шаха',
+      }[record.variant]}</span>
       <time class="card-date" datetime="${new Date(record.timestamp).toISOString()}">${escapeHistoryText(record.dateFormatted)}</time>
     </header>
     <div class="history-card-body"><div class="card-info-col archive-card-details">
@@ -135,6 +146,29 @@ export class HistoryArchiveUI {
 
   private handleClick = (event: MouseEvent): void => {
     const target = event.target instanceof Element ? event.target : null;
+    if (this.confirmModal) {
+      if (target === this.confirmModal || target?.closest('[data-history-confirm="cancel"]')) {
+        this.closeClearConfirmation();
+      } else if (target?.closest('[data-history-confirm="clear"]')) {
+        clearAllHistory();
+        if (getGameHistory().length) {
+          this.confirmModal.querySelector<HTMLElement>('[role="alert"]')!.textContent = 'Не удалось очистить архив. Попробуйте ещё раз.';
+          return;
+        }
+        this.closeClearConfirmation();
+        this.filter = 'all';
+        this.container.querySelectorAll<HTMLElement>('[data-history-filter]').forEach((button) =>
+          button.setAttribute('aria-pressed', String(button.dataset.historyFilter === 'all')));
+        this.refresh();
+        this.container.querySelector<HTMLButtonElement>('[data-history-filter="all"]')?.focus();
+      }
+      return;
+    }
+    const clearButton = target?.closest<HTMLButtonElement>('#clear-history-btn');
+    if (clearButton) {
+      if (!clearButton.disabled) this.openClearConfirmation();
+      return;
+    }
     if (target?.closest('#history-back')) {
       event.preventDefault();
       this.options.onBack();
@@ -171,6 +205,59 @@ export class HistoryArchiveUI {
     }
   };
 
+  private openClearConfirmation(): void {
+    if (this.confirmModal || !getGameHistory().length) return;
+    this.confirmPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const titleId = `${this.spritePrefix}-clear-title`;
+    const textId = `${this.spritePrefix}-clear-text`;
+    this.confirmModal = document.createElement('div');
+    this.confirmModal.className = 'confirm-modal';
+    this.confirmModal.setAttribute('role', 'alertdialog');
+    this.confirmModal.setAttribute('aria-modal', 'true');
+    this.confirmModal.setAttribute('aria-labelledby', titleId);
+    this.confirmModal.setAttribute('aria-describedby', textId);
+    this.confirmModal.innerHTML = `<div class="confirm-modal-card">
+      <span class="confirm-modal-icon" aria-hidden="true">${archiveIcon('delete')}</span>
+      <h2 id="${titleId}">Очистить архив партий?</h2>
+      <p id="${textId}">Все сохранённые матчи и статистика будут удалены без возможности восстановления.</p>
+      <p class="confirm-modal-error" role="alert"></p>
+      <div class="confirm-modal-actions">
+        <button type="button" class="solar-btn-ghost" data-history-confirm="cancel">Отмена</button>
+        <button type="button" class="btn-danger-confirm" data-history-confirm="clear">Удалить всё</button>
+      </div>
+    </div>`;
+    this.container.querySelector('.archive-center')?.setAttribute('inert', '');
+    this.container.appendChild(this.confirmModal);
+    this.confirmModal.querySelector<HTMLButtonElement>('[data-history-confirm="cancel"]')!.focus();
+  }
+
+  private closeClearConfirmation(): void {
+    this.confirmModal?.remove();
+    this.confirmModal = null;
+    this.container.querySelector('.archive-center')?.removeAttribute('inert');
+    if (this.confirmPreviousFocus?.isConnected) this.confirmPreviousFocus.focus();
+    this.confirmPreviousFocus = null;
+  }
+
+  private handleConfirmKeydown = (event: KeyboardEvent): void => {
+    if (!this.confirmModal) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeClearConfirmation();
+    } else if (event.key === 'Tab') {
+      const buttons = [...this.confirmModal.querySelectorAll<HTMLButtonElement>('button')];
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !this.confirmModal.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !this.confirmModal.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
   private async copyPGN(pgn: string): Promise<void> {
     try {
       if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(pgn);
@@ -201,6 +288,7 @@ export class HistoryArchiveUI {
   }
 
   public destroy(): void {
+    this.closeClearConfirmation();
     this.events.abort();
     if (this.toastTimer) clearTimeout(this.toastTimer);
   }
