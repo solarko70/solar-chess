@@ -607,7 +607,8 @@ export class HistoryUI {
       this.mistakeNavEl.style.display = 'none';
     }
 
-    let replayState = classicalRuleSet.getInitialState();
+    let replayState = this.store.supportsClassicalAnalysis()
+      ? classicalRuleSet.getInitialState() : this.store.getStateAtPly(-1);
     const sans: string[] = [];
     for (let i = 0; i < history.length; i++) {
       sans.push(moveToSAN(replayState, history[i]));

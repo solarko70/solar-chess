@@ -7985,6 +7985,8 @@ body:has(#screen-analysis.active) #app {
 }
 
 .variants-page {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 1120px;
   display: flex;
@@ -8072,7 +8074,31 @@ body:has(#screen-analysis.active) #app {
   box-shadow: 0 0 0 18px rgba(245, 158, 11, 0.025), 0 0 0 40px rgba(245, 158, 11, 0.02);
 }
 .variants-hero-orbit svg { width: 90px; height: 90px; stroke-width: 0.7; opacity: 0.65; }
-.variants-hero-orbit span { position: absolute; font-size: 1.2rem; font-weight: 700; }
+.variants-hero-orbit::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff5d2;
+  box-shadow: 0 0 18px #fbbf24, 0 0 45px rgba(245, 158, 11, 0.4);
+}
+
+.variants-space-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 0 10%, rgba(49, 46, 129, 0.42), transparent 55%),
+    radial-gradient(ellipse at 100% 85%, rgba(180, 83, 9, 0.19), transparent 50%),
+    linear-gradient(150deg, #070d20, #0a1020 50%, #100e1b);
+}
+.variants-space-orbits { width: 100%; height: 100%; opacity: 0.75; }
+.variants-orbit-lines { stroke: rgba(251, 191, 36, 0.16); stroke-width: 1; }
+.variants-constellation-lines { stroke: rgba(165, 180, 252, 0.2); stroke-width: 1; }
+.variants-space-stars { color: #d3ddff; opacity: 0.8; }
+.variants-orbit-planet { fill: #fcd68a; stroke: rgba(251, 191, 36, 0.16); stroke-width: 12; }
 
 .variants-tabs {
   position: relative;
@@ -8445,13 +8471,14 @@ body:has(#screen-analysis.active) #app {
 
 .variant-setup-card {
   width: 100%;
-  max-width: 520px;
+  max-width: 620px;
   max-height: 90vh;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 1.5rem;
-  border-radius: 12px;
-  background: #0f172a;
+  padding: clamp(20px, 4vw, 30px);
+  border-radius: 22px;
+  background: radial-gradient(ellipse at 100% 0, rgba(245, 158, 11, 0.12), transparent 55%),
+    linear-gradient(145deg, #172238, #0b1222);
   color: #f8fafc;
   border: 1px solid rgba(245, 158, 11, 0.55);
   box-shadow:
@@ -8502,8 +8529,61 @@ body:has(#screen-analysis.active) #app {
 .variant-setup-body {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
+
+.variant-level-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.variant-level-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 76px;
+  padding: 12px 4px;
+  border-radius: 12px;
+  background: rgba(8, 16, 31, 0.6);
+}
+.variant-level-card span { font-size: clamp(0.65rem, 2.4vw, 0.86rem); }
+.variant-level-card strong { color: #b6c2d7; font-size: 1rem; }
+.variant-level-card.active {
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.22), 0 0 18px rgba(245, 158, 11, 0.12);
+  background: linear-gradient(140deg, rgba(245, 158, 11, 0.22), rgba(245, 158, 11, 0.06));
+}
+.variant-level-card.active strong { color: #fde68a; }
+.variant-seg-btn:focus-visible { outline: 2px solid #fbbf24; outline-offset: 3px; }
+
+.variant-game-over-dialog { max-width: 720px; }
+.variant-game-over-dialog .game-over-title { max-width: 560px; margin-inline: auto; line-height: 1.25; }
+.variant-game-over-players:not([hidden]) { display: grid; gap: 10px; margin-top: 24px; width: 100%; }
+.variant-result-player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.65);
+  text-align: left;
+  color: #d5deed;
+}
+.variant-result-player .player-color-indicator { flex-shrink: 0; }
+.variant-result-player strong { margin-left: auto; color: #fcd68a; font-size: 0.75rem; }
+.variant-result-winner { border-color: rgba(245, 158, 11, 0.42); background: linear-gradient(110deg, rgba(245, 158, 11, 0.12), rgba(15, 23, 42, 0.65)); }
+.variant-game-over-dialog .game-over-actions { flex-wrap: wrap; }
+.variant-game-over-dialog #btn-modal-variants-menu:not([hidden]) { flex-basis: 100%; }
+.variant-game-over-dialog #btn-modal-new-game { order: -1; }
+.variant-replay-section:not([hidden]) { display: grid; gap: 12px; padding: 22px; }
+.variant-replay-section h3,
+.variant-replay-section p { margin: 0; }
+.variant-replay-section p { line-height: 1.6; color: var(--text-secondary); }
+.variant-replay-overlay .review-mobile-tabs { display: none !important; }
+.variant-replay-overlay .review-board-nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#btn-modal-variants-menu[hidden],
+.variant-game-over-players[hidden],
+.variant-replay-section[hidden],
+#review-best-move-btn[hidden] { display: none !important; }
 
 .variant-setup-footer {
   display: flex;

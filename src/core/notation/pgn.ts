@@ -1,9 +1,21 @@
 import type { GameState } from '../types';
 import { moveToSAN, sanToMove } from './san';
-import { applyMove } from '../moves/apply';
+import { applyMove, undoMove } from '../moves/apply';
+import { parseFEN, serializeFEN } from './fen';
 import { classicalRuleSet } from '../rules/classical';
 
 export function exportPGN(state: GameState, metadata?: Record<string, string>): string {
+  let initialState = classicalRuleSet.getInitialState();
+  const variantHeaders: Record<string, string> = {};
+  if (state.variant === 'king-of-the-hill' || state.variant === 'three-check') {
+    initialState = state;
+    while (initialState.history.length) initialState = undoMove(initialState);
+    variantHeaders.Variant = state.variant === 'king-of-the-hill' ? 'King of the Hill' : 'Three-check';
+    if (serializeFEN(initialState) !== serializeFEN(classicalRuleSet.getInitialState())) {
+      variantHeaders.SetUp = '1';
+      variantHeaders.FEN = serializeFEN(initialState);
+    }
+  }
   const headers: Record<string, string> = {
     Event: metadata?.Event ?? 'Casual Game',
     Site: metadata?.Site ?? 'Chess Arena',
@@ -12,6 +24,7 @@ export function exportPGN(state: GameState, metadata?: Record<string, string>): 
     White: metadata?.White ?? 'Player 1',
     Black: metadata?.Black ?? 'Player 2',
     Result: metadata?.Result ?? '*',
+    ...variantHeaders,
     ...metadata,
   };
 
@@ -22,16 +35,19 @@ export function exportPGN(state: GameState, metadata?: Record<string, string>): 
   pgn += '\n';
 
   // Replay history from initial state
-  let currentState = classicalRuleSet.getInitialState();
+  let currentState = initialState;
   const movesText: string[] = [];
-  let moveNum = 1;
+  let moveNum = initialState.fullMoveNumber;
 
   for (let i = 0; i < state.history.length; i++) {
     const move = state.history[i];
     const san = moveToSAN(currentState, move);
 
-    if (i % 2 === 0) {
+    if (currentState.turn === 'white') {
       movesText.push(`${moveNum}. ${san}`);
+    } else if (i === 0) {
+      movesText.push(`${moveNum}... ${san}`);
+      moveNum++;
     } else {
       movesText[movesText.length - 1] += ` ${san}`;
       moveNum++;
@@ -76,7 +92,11 @@ export function parsePGN(pgnText: string): { headers: Record<string, string>; st
 
   const tokens = text.trim().split(/\s+/).filter(Boolean);
 
-  let state = classicalRuleSet.getInitialState();
+  const variant = headers.Variant === 'King of the Hill' ? 'king-of-the-hill'
+    : headers.Variant === 'Three-check' ? 'three-check' : 'standard';
+  let state: GameState = headers.SetUp === '1' && headers.FEN
+    ? parseFEN(headers.FEN, 8, 8, variant)
+    : { ...classicalRuleSet.getInitialState(), variant };
   for (const token of tokens) {
     const move = sanToMove(state, token);
     if (!move) {

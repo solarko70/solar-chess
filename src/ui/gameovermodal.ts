@@ -1,4 +1,5 @@
 import { ChessStore } from '@/state/store';
+import { LEVELS } from '@/ai';
 import {
   formatMaterialPoints,
   getSidePerformanceRating,
@@ -17,6 +18,8 @@ const DEEP_ANALYSIS_STORAGE_KEY = 'chess_arena_deep_analysis';
 export interface GameOverModalOptions {
   onStartReview?: (options?: { isDeep?: boolean; depth?: number }) => void;
   onNewGame?: () => void;
+  onStartReplay?: () => void;
+  onVariantsMenu?: () => void;
 }
 
 function formatDuration(ms: number): string {
@@ -87,6 +90,8 @@ export class GameOverModalUI {
   private deepCheckbox!: HTMLInputElement;
   private reviewBtn!: HTMLButtonElement;
   private newGameBtn!: HTMLButtonElement;
+  private variantsMenuBtn!: HTMLButtonElement;
+  private playersEl!: HTMLElement;
 
   // Card cache to prevent re-creating DOM nodes during progress updates
   private cardsBuilt = false;
@@ -116,7 +121,7 @@ export class GameOverModalUI {
     this.container.innerHTML = `
       <div class="game-over-overlay" id="game-over-overlay" style="display: none;">
         <div class="game-over-dialog" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
-          <button class="game-over-close-btn" id="game-over-close-btn" aria-label="Закрыть">✕</button>
+          <button class="game-over-close-btn" id="game-over-close-btn" aria-label="Закрыть"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
           <div class="game-over-content">
             <div class="game-over-header">
               <div class="game-over-verdict" id="game-over-verdict" style="display: none;"></div>
@@ -128,6 +133,7 @@ export class GameOverModalUI {
                 <span>Длительность: <span id="game-over-duration"></span></span>
               </div>
               <div class="opening-badge solar-card" id="game-over-opening-badge" style="display: none;"></div>
+              <div class="variant-game-over-players" id="variant-game-over-players" hidden></div>
             </div>
 
             <!-- Hidden element for backwards compatibility with tests asserting #game-over-material -->
@@ -157,6 +163,7 @@ export class GameOverModalUI {
             <div class="game-over-actions">
               <button class="btn-action btn-modal-primary solar-btn" id="btn-modal-review">Разбор партии</button>
               <button class="btn-action btn-modal-secondary solar-btn-ghost" id="btn-modal-new-game">Играть снова</button>
+              <button class="btn-action solar-btn-ghost" id="btn-modal-variants-menu" hidden disabled>В меню вариаций</button>
             </div>
           </div>
         </div>
@@ -184,6 +191,8 @@ export class GameOverModalUI {
     }
     this.reviewBtn = this.container.querySelector('#btn-modal-review') as HTMLButtonElement;
     this.newGameBtn = this.container.querySelector('#btn-modal-new-game') as HTMLButtonElement;
+    this.variantsMenuBtn = this.container.querySelector('#btn-modal-variants-menu') as HTMLButtonElement;
+    this.playersEl = this.container.querySelector('#variant-game-over-players') as HTMLElement;
   }
 
   private attachEvents(): void {
@@ -209,6 +218,15 @@ export class GameOverModalUI {
 
     this.reviewBtn.addEventListener('click', () => {
       this.hide(true);
+      if (!this.store.supportsClassicalAnalysis()) {
+        if (this.options?.onStartReplay) {
+          this.options.onStartReplay();
+        } else {
+          this.store.setReviewMode(true);
+          this.store.setViewIndex(-1);
+        }
+        return;
+      }
       const isDeep = this.deepCheckbox?.checked ?? false;
       const depth = isDeep ? DEEP_REVIEW_DEPTH : DEFAULT_REVIEW_DEPTH;
       if (this.options?.onStartReview) {
@@ -225,8 +243,23 @@ export class GameOverModalUI {
       if (this.options?.onNewGame) {
         this.options.onNewGame();
       } else {
+        if (!this.store.supportsClassicalAnalysis()) {
+          this.store.newGame();
+          return;
+        }
         const mainNewGameBtn = document.getElementById('btn-new-game') as HTMLButtonElement | null;
         mainNewGameBtn?.click();
+      }
+    });
+
+    this.variantsMenuBtn.addEventListener('click', () => {
+      this.store.cancelReview();
+      this.hide(true);
+      if (this.options?.onVariantsMenu) {
+        this.options.onVariantsMenu();
+      } else {
+        this.store.setActiveGame(false);
+        window.location.hash = '#/variants';
       }
     });
 
@@ -547,6 +580,17 @@ export class GameOverModalUI {
     const timedOutLoser = this.store.getTimedOutLoser();
     const resignedPlayer = this.store.getResignedPlayer();
     const gameMode = this.store.getGameMode();
+    const isVariant = !this.store.supportsClassicalAnalysis();
+    this.dialog.classList.toggle('variant-game-over-dialog', isVariant);
+    this.container.querySelector<HTMLElement>('#game-over-review-summary')!.style.display = isVariant ? 'none' : '';
+    this.container.querySelector<HTMLElement>('.game-over-options')!.style.display = isVariant ? 'none' : '';
+    this.deepCheckbox.disabled = isVariant;
+    this.reviewBtn.textContent = isVariant ? 'Просмотр партии' : 'Разбор партии';
+    this.reviewBtn.classList.toggle('btn-replay-variant', isVariant);
+    this.reviewBtn.dataset.action = isVariant ? 'replay' : 'review';
+    this.variantsMenuBtn.hidden = !isVariant;
+    this.variantsMenuBtn.disabled = !isVariant;
+    this.playersEl.hidden = !isVariant;
 
     // Determine winner
     let winner: 'white' | 'black' | 'draw' = 'draw';
@@ -603,6 +647,11 @@ export class GameOverModalUI {
         verdict = 'Ничья';
         verdictClass = 'verdict-draw';
       }
+    }
+
+    if (isVariant) {
+      verdict = winner === 'draw' ? 'Ничья'
+        : gameMode === 'ai' && winner !== this.store.getPlayerColor() ? 'Поражение' : 'Победа';
     }
 
     let iconSvg = '';
@@ -685,6 +734,10 @@ export class GameOverModalUI {
       reason = 'Оставшихся фигур недостаточно для постановки мата';
     }
 
+    if (isVariant && resignedPlayer === null && timedOutLoser === null) {
+      if (result.type === 'kingOfTheHill') title = 'Царь горы: Король занял вершину холма';
+      if (result.type === 'threeCheck') title = 'Три шаха: Объявлено 3 шаха';
+    }
     this.titleEl.textContent = title;
     this.reasonEl.textContent = reason;
 
@@ -695,6 +748,40 @@ export class GameOverModalUI {
 
     const durationMs = this.store.getGameDurationMs();
     this.durationEl.textContent = formatDuration(durationMs);
+
+    if (isVariant) {
+      // Variant results contain game facts only; classical statistics are never mounted.
+      this.cardsContainerEl.replaceChildren();
+      this.cardsBuilt = false;
+      this.whiteCardDom = null;
+      this.blackCardDom = null;
+      this.srOnlyEl = null;
+      this.progressWrapEl.style.display = 'none';
+      this.progressWrapEl.replaceChildren();
+      this.openingBadgeEl.style.display = 'none';
+      this.playersEl.replaceChildren();
+      for (const side of ['white', 'black'] as const) {
+        const player = document.createElement('div');
+        player.className = 'variant-result-player';
+        player.classList.toggle('variant-result-winner', winner === side);
+        const color = document.createElement('span');
+        color.className = `player-color-indicator ${side}`;
+        color.setAttribute('aria-hidden', 'true');
+        const name = document.createElement('span');
+        const sideName = side === 'white' ? 'Белые' : 'Чёрные';
+        name.textContent = gameMode === 'ai'
+          ? `${sideName} — ${side === this.store.getPlayerColor() ? 'Вы' : `Компьютер: ${LEVELS[this.store.getAILevel()].name}`}`
+          : sideName;
+        player.append(color, name);
+        if (winner === side) {
+          const label = document.createElement('strong');
+          label.textContent = 'Победитель';
+          player.appendChild(label);
+        }
+        this.playersEl.appendChild(player);
+      }
+      return;
+    }
 
     const lost = this.store.getLostMaterial();
     this.materialEl.textContent = `Белые: −${lost.white} очков | Чёрные: −${lost.black} очков`;

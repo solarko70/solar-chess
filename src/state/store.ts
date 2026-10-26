@@ -190,6 +190,14 @@ export class ChessStore {
   }
 
   getStateAtPly(ply: number): GameState {
+    if (!this.supportsClassicalAnalysis()) {
+      let position = this.state;
+      const historyLength = Math.max(0, ply + 1);
+      while (position.history.length > historyLength) {
+        position = this.ruleSet.undoMove(position);
+      }
+      return position;
+    }
     if (ply < 0) {
       return { ...this.ruleSet.getInitialState(), variant: this.variant };
     }
@@ -297,6 +305,7 @@ export class ChessStore {
   }
 
   isPlayerTurn(): boolean {
+    if (this.isReplayMode()) return false;
     if (this.isReviewing) return false;
     if (this.isReviewModeActive || this.allowVariations) return true;
     if (this.timedOutLoser !== null) return false;
@@ -1077,6 +1086,7 @@ export class ChessStore {
   loadPGN(pgnText: string): boolean {
     try {
       const parsed = parsePGN(pgnText);
+      if (parsed.headers.Variant) this.variant = parsed.state.variant ?? 'standard';
       this.gameId = crypto.randomUUID();
       this.cancelAISearch();
       this.clearPremove();
@@ -1171,11 +1181,20 @@ export class ChessStore {
 
   // ── Review methods ─────────────────────────────────────────────────────────
 
+  supportsClassicalAnalysis(): boolean {
+    return ['standard', 'chess-960'].includes(this.state.variant ?? 'standard');
+  }
+
+  isReplayMode(): boolean {
+    return this.isReviewModeActive && !this.supportsClassicalAnalysis();
+  }
+
   getReviewResult(): ReviewRunResult | null {
     return this.reviewResult;
   }
 
   setReviewResult(result: ReviewRunResult | null, fallbackNote?: string | null): void {
+    if (!this.supportsClassicalAnalysis() && result) return;
     this.reviewResult = result;
     this.reviewFallbackNote = fallbackNote ?? result?.fallbackNote ?? null;
     this.notify();
@@ -1272,6 +1291,7 @@ export class ChessStore {
   }
 
   canReview(): boolean {
+    if (!this.supportsClassicalAnalysis()) return false;
     if (this.isReviewing) return false;
     return this.state.history.length >= 2;
   }
@@ -1304,6 +1324,7 @@ export class ChessStore {
   }
 
   async startReview(options?: { isDeep?: boolean; depth?: number; force?: boolean }): Promise<ReviewRunResult | null> {
+    if (!this.supportsClassicalAnalysis()) return null;
     let targetDepth: number;
     if (options?.depth !== undefined) {
       targetDepth = options.depth;
@@ -1399,6 +1420,7 @@ export class ChessStore {
   }
 
   maybeTriggerAutoReview(): void {
+    if (!this.supportsClassicalAnalysis()) return;
     const hasEngineOrWorker =
       typeof Worker !== 'undefined' ||
       this.reviewWorkerFactory !== undefined ||
@@ -1573,6 +1595,9 @@ export class ChessStore {
   }
 
   getOrCreateReviewEngine(): AnalysisEngine {
+    if (!this.supportsClassicalAnalysis()) {
+      throw new Error('Анализ движком недоступен для этой вариации');
+    }
     if (this.reviewEngine) return this.reviewEngine;
     if (!this.activeEngine) {
       this.activeEngine = createEngine(this.state);
@@ -1581,6 +1606,7 @@ export class ChessStore {
   }
 
   makeReviewMove(from: Square, to: Square, promoPiece?: PieceType): boolean {
+    if (!this.supportsClassicalAnalysis()) return false;
     const currentState = this.getState();
     const legalMoves = this.ruleSet.generateLegalMoves
       ? this.ruleSet.generateLegalMoves(currentState)
@@ -1772,6 +1798,7 @@ export class ChessStore {
     bestSan?: string,
     parentId: string | null = null,
   ): VariationNode | null {
+    if (!this.supportsClassicalAnalysis()) return null;
     let parentNode: VariationNode | null = null;
     let stateBefore: GameState;
     let ply: number;

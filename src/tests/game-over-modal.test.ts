@@ -1,8 +1,24 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ChessStore } from '@/state/store';
+import { ChessStore, globalStore } from '@/state/store';
+import { initApp } from '@/main';
 import { GameOverModalUI } from '@/ui/gameovermodal';
-import { parseFEN } from '@/core';
+import { exportPGN, parseFEN, parsePGN, serializeFEN } from '@/core';
+import { ChessBoardUI } from '@/ui/board';
+import { ReviewPanelUI } from '@/ui/reviewpanel';
+import { ArchivedGameReviewUI } from '@/ui/history-review';
+import { getGameById } from '@/storage/history';
 import type { ReviewRunResult } from '@/analysis';
+
+const variantGames = [
+  {
+    variant: 'king-of-the-hill', title: 'Царь горы: Король занял вершину холма',
+    moves: [[52, 36], [8, 16], [60, 52], [16, 24], [52, 44], [9, 17], [44, 35]],
+  },
+  {
+    variant: 'three-check', title: 'Три шаха: Объявлено 3 шаха',
+    moves: [[52, 36], [12, 28], [61, 34], [13, 21], [59, 31], [4, 12], [31, 13], [12, 19], [13, 27]],
+  },
+] as const;
 
 describe('GameOverModalUI', () => {
   let store: ChessStore;
@@ -372,5 +388,204 @@ describe('GameOverModalUI', () => {
     // Closing modal restores focus
     modal.hide();
     expect(document.activeElement).toBe(triggerBtn);
+  });
+
+  it.each(variantGames)('shows a clean $variant result and never starts classical analysis', async ({ variant, title, moves }) => {
+    const analyze = vi.fn();
+    const workerFactory = vi.fn();
+    store.setReviewEngine({ name: 'UnusedEngine', analyze, dispose: vi.fn() });
+    store.setReviewWorkerFactory(workerFactory);
+    store.newGame(undefined, { variant });
+    modal = new GameOverModalUI(container, store);
+    for (const [from, to] of moves) expect(store.makeMove(from, to)).toBe(true);
+    expect(modal.isOpen()).toBe(true);
+    expect(container.querySelector('#game-over-title')?.textContent).toBe(title);
+    expect(container.querySelector('#game-over-verdict')?.textContent).toBe('Победа');
+    expect(container.querySelector('#game-over-moves')?.textContent).toContain(`полуходов: ${moves.length}`);
+    expect(container.querySelector('#game-over-duration')?.textContent).toMatch(/^\d+:\d{2}$/);
+    expect(container.querySelector('#variant-game-over-players')?.textContent).toContain('Белые');
+    expect(container.querySelector('#variant-game-over-players')?.textContent).toContain('Чёрные');
+    expect(container.querySelector('.card-accuracy-section, .card-performance-rating, .class-row')).toBeNull();
+    expect(container.querySelector('#game-over-cards')?.children).toHaveLength(0);
+    expect(container.querySelector<HTMLButtonElement>('.btn-replay-variant[data-action="replay"]')?.textContent)
+      .toBe('Просмотр партии');
+    expect(container.querySelector<HTMLButtonElement>('#btn-modal-variants-menu')?.hidden).toBe(false);
+    expect(store.canReview()).toBe(false);
+    expect(store.isReviewInProgress()).toBe(false);
+    expect(await store.startReview({ force: true })).toBeNull();
+    expect(store.getReviewResult()).toBeNull();
+    expect(analyze).not.toHaveBeenCalled();
+    expect(workerFactory).not.toHaveBeenCalled();
+    expect(() => store.getOrCreateReviewEngine()).toThrow('Анализ движком недоступен');
+  });
+
+  it('shows variant loss and draw verdicts with bot names', () => {
+    store.newGame(undefined, { variant: 'three-check', mode: 'ai', level: 'singularity', playerColor: 'white' });
+    modal = new GameOverModalUI(container, store);
+    store.resign('white');
+    expect(container.querySelector('#game-over-verdict')?.textContent).toBe('Поражение');
+    expect(container.querySelector('#variant-game-over-players')?.textContent).toContain('Сингулярность');
+    expect(container.querySelector('#variant-game-over-players')?.textContent).toContain('Вы');
+    store.newGame(parseFEN('7k/8/8/8/8/8/8/K7 w - - 0 1', 8, 8, 'three-check'));
+    modal.show();
+    expect(container.querySelector('#game-over-verdict')?.textContent).toBe('Ничья');
+  });
+
+  it('clears old classical cards when the next match uses a variant', () => {
+    modal = new GameOverModalUI(container, store);
+    modal.show();
+    expect(container.querySelector('.card-accuracy-section')).not.toBeNull();
+    store.newGame(undefined, { variant: 'king-of-the-hill' });
+    store.resign('black');
+    expect(container.querySelector('.card-accuracy-section')).toBeNull();
+    store.newGame(undefined, { variant: 'standard' });
+    store.resign('black');
+    expect(container.querySelector('.card-accuracy-section')).not.toBeNull();
+    expect(container.querySelector('#btn-modal-review')?.textContent).toBe('Разбор партии');
+    expect(container.querySelector<HTMLButtonElement>('#btn-modal-variants-menu')?.hidden).toBe(true);
+  });
+
+  it('replays a custom starting position and exports its variant and FEN', async () => {
+    const initial = parseFEN('7k/8/8/8/8/3K4/8/8 w - - 0 1', 8, 8, 'king-of-the-hill');
+    store.newGame(initial);
+    expect(store.makeMove(43, 35)).toBe(true);
+    const panel = new ReviewPanelUI(container, store);
+    const boardMount = document.createElement('div');
+    document.body.appendChild(boardMount);
+    const board = new ChessBoardUI(boardMount, store);
+    try {
+      await panel.startReview();
+      expect(store.isReplayMode()).toBe(true);
+      expect(serializeFEN(store.getState())).toBe(serializeFEN(initial));
+      expect(store.makeMove(43, 34)).toBe(false);
+      board.setExternalScore({ type: 'cp', value: 500 });
+      board.setExternalArrow(store.getLiveState().history[0]);
+      expect(boardMount.querySelector<HTMLElement>('#eval-bar-wrapper')?.style.display).toBe('none');
+      expect(boardMount.querySelector('.best-move-arrow-line, .board-move-badge')).toBeNull();
+      const pgn = exportPGN(store.getLiveState(), { Result: '1-0' });
+      expect(pgn).toContain('[Variant "King of the Hill"]');
+      expect(pgn).toContain(`[FEN "${serializeFEN(initial)}"]`);
+      const parsed = parsePGN(pgn).state;
+      expect(parsed.variant).toBe('king-of-the-hill');
+      expect(serializeFEN(parsed)).toBe(serializeFEN(store.getLiveState()));
+    } finally {
+      panel.destroy();
+      board.destroy();
+      boardMount.remove();
+    }
+  });
+});
+
+describe('Stage 13d: variant replay from the summary', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '<div id="app"></div>';
+    window.location.hash = '#/';
+    initApp();
+  });
+
+  afterEach(() => {
+    globalStore.setReviewEngine(undefined);
+    globalStore.setReviewWorkerFactory(undefined);
+    globalStore.cancelReview();
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+    window.location.hash = '#/';
+  });
+
+  it.each(variantGames)('opens $variant Replay with navigation, PGN export and no engine', async ({ variant, moves }) => {
+    const analyze = vi.fn();
+    const workerFactory = vi.fn();
+    globalStore.setReviewEngine({ name: 'UnusedEngine', analyze, dispose: vi.fn() });
+    globalStore.setReviewWorkerFactory(workerFactory);
+    globalStore.newGame(undefined, { variant, mode: 'pvp', level: 'expert' });
+    window.location.hash = '#/game';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    for (const [from, to] of moves) expect(globalStore.makeMove(from, to)).toBe(true);
+    const finalFen = serializeFEN(globalStore.getLiveState());
+    document.querySelector<HTMLButtonElement>('.btn-replay-variant')!.click();
+    const overlay = document.getElementById('review-overlay')!;
+    expect(overlay.style.display).toBe('flex');
+    expect(overlay.classList.contains('variant-replay-overlay')).toBe(true);
+    expect(overlay.querySelector('.review-overlay-title')?.textContent).toBe('Просмотр партии');
+    expect(globalStore.isReplayMode()).toBe(true);
+    expect(globalStore.getViewIndex()).toBe(-1);
+    expect(overlay.querySelectorAll('.history-move')).toHaveLength(moves.length);
+    expect(overlay.querySelector<HTMLElement>('#review-results-section')?.style.display).toBe('none');
+    expect(overlay.querySelector<HTMLButtonElement>('#review-best-move-btn')?.hidden).toBe(true);
+    expect(overlay.querySelector<HTMLElement>('#eval-bar-wrapper')?.style.display).toBe('none');
+    expect(overlay.querySelector('.best-move-arrow-line, .board-move-badge, .review-move-badge')).toBeNull();
+    document.getElementById('review-nav-next')!.click();
+    expect(globalStore.getViewIndex()).toBe(0);
+    expect(overlay.querySelector('.chess-square.last-move[data-square="36"]')).not.toBeNull();
+    expect(globalStore.makeMove(8, 16)).toBe(false);
+    document.getElementById('review-nav-last')!.click();
+    expect(serializeFEN(globalStore.getState())).toBe(finalFen);
+    document.getElementById('review-nav-prev')!.click();
+    expect(globalStore.getViewIndex()).toBe(moves.length - 2);
+    overlay.querySelector<HTMLElement>('.history-move[data-move-index="1"]')!.click();
+    expect(globalStore.getViewIndex()).toBe(1);
+    document.getElementById('review-nav-first')!.click();
+    expect(globalStore.getViewIndex()).toBe(-1);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const previousClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    try {
+      document.getElementById('btn-copy-replay-pgn')!.click();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledOnce();
+      const pgn = writeText.mock.calls[0][0] as string;
+      expect(pgn).toContain('[Variant "');
+      expect(pgn).toContain('[Result "1-0"]');
+      expect(pgn).not.toMatch(/\[%eval|\[%cal|\{[^}]*\}|[?!]/);
+      expect(parsePGN(pgn).state.variant).toBe(variant);
+      expect(serializeFEN(parsePGN(pgn).state)).toBe(finalFen);
+    } finally {
+      if (previousClipboard) Object.defineProperty(navigator, 'clipboard', previousClipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+    expect(analyze).not.toHaveBeenCalled();
+    expect(workerFactory).not.toHaveBeenCalled();
+    document.getElementById('btn-close-review-overlay')!.click();
+    expect(globalStore.isReplayMode()).toBe(false);
+    expect(document.getElementById('game-over-overlay')?.style.display).toBe('flex');
+    const gameId = globalStore.getGameId();
+    document.getElementById('btn-modal-new-game')!.click();
+    expect(globalStore.getGameId()).not.toBe(gameId);
+    expect(globalStore.getVariant()).toBe(variant);
+    expect(globalStore.getAILevel()).toBe('expert');
+    expect(globalStore.getLiveState().history).toHaveLength(0);
+    expect(window.location.hash).toBe('#/game');
+    for (const [from, to] of moves) expect(globalStore.makeMove(from, to)).toBe(true);
+    document.getElementById('btn-modal-variants-menu')!.click();
+    expect(window.location.hash).toBe('#/variants');
+  });
+
+  it.each(variantGames)('opens saved $variant games as Replay, including legacy records', ({ variant, moves }) => {
+    globalStore.newGame(undefined, { variant, mode: 'pvp' });
+    for (const [from, to] of moves) expect(globalStore.makeMove(from, to)).toBe(true);
+    const record = getGameById(globalStore.getGameId())!;
+    expect(record).not.toBeNull();
+    const startReview = vi.spyOn(ChessStore.prototype, 'startReview');
+    const getEngine = vi.spyOn(ChessStore.prototype, 'getOrCreateReviewEngine');
+    for (const legacy of [false, true]) {
+      const overlay = document.createElement('div');
+      overlay.className = 'review-overlay';
+      document.body.appendChild(overlay);
+      const archived = new ArchivedGameReviewUI(overlay, {
+        ...record, pgn: legacy ? record.pgn.replace(/\[Variant "[^"]*"\]\n/, '') : record.pgn,
+      }, () => {});
+      try {
+        expect(overlay.classList.contains('variant-replay-overlay')).toBe(true);
+        expect(overlay.querySelector('.review-overlay-title')?.textContent).toBe('Просмотр партии');
+        expect(overlay.querySelector('.variant-replay-section')?.hasAttribute('hidden')).toBe(false);
+        expect(overlay.querySelectorAll('.history-move')).toHaveLength(moves.length);
+        expect(startReview).not.toHaveBeenCalled();
+        expect(getEngine).not.toHaveBeenCalled();
+      } finally {
+        archived.destroy();
+        overlay.remove();
+      }
+    }
   });
 });

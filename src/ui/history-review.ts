@@ -19,6 +19,8 @@ export class ArchivedGameReviewUI {
   private previousFocus = document.activeElement as HTMLElement | null;
 
   constructor(private overlay: HTMLElement, record: GameRecord, private onClose: () => void) {
+    if (record.reason === 'kingOfTheHill') this.store.setVariant('king-of-the-hill');
+    if (record.reason === 'threeCheck') this.store.setVariant('three-check');
     if (!this.store.loadPGN(record.pgn)) throw new Error('Invalid archived PGN');
     this.store.setActiveGame(false);
     this.store.setReviewMode(true);
@@ -39,6 +41,10 @@ export class ArchivedGameReviewUI {
           <div class="review-overlay-panel-slot" data-archive-panel></div>
         </div>
       </div>`;
+    if (!this.store.supportsClassicalAnalysis()) {
+      overlay.classList.add('variant-replay-overlay');
+      overlay.querySelector<HTMLElement>('.review-overlay-title')!.textContent = 'Просмотр партии';
+    }
     this.board = new ChessBoardUI(overlay.querySelector('[data-archive-board]')!, this.store);
     this.history = new HistoryUI(overlay.querySelector('[data-archive-history]')!, this.store);
     this.panel = new ReviewPanelUI(overlay.querySelector('[data-archive-panel]')!, this.store, {
@@ -86,6 +92,7 @@ export class ArchivedGameReviewUI {
   };
 
   public destroy(): void {
+    this.overlay.classList.remove('variant-replay-overlay');
     this.events.abort();
     this.unsubscribe();
     this.panel.destroy();

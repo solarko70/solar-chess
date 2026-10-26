@@ -148,6 +148,45 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
     expect(document.getElementById('tab-btn-fairy')?.tabIndex).toBe(-1);
   });
 
+  it('renders a solar glyph without 64 and a decorative orbital background', () => {
+    document.getElementById('btn-play-variants')!.click();
+    const hero = document.querySelector('.variants-hero')!;
+    expect(hero.textContent).not.toContain('64');
+    expect(hero.querySelector('.variants-hero-orbit svg')).not.toBeNull();
+    const background = document.querySelector('#screen-variants > .variants-space-bg')!;
+    expect(background.getAttribute('aria-hidden')).toBe('true');
+    expect(background.querySelectorAll('ellipse').length).toBeGreaterThan(2);
+    expect(background.querySelector('.variants-space-stars')).not.toBeNull();
+  });
+
+  it('offers six bot levels and starts each with the corresponding engine level', () => {
+    const levels = [
+      ['novice', 'Новичок', '600'], ['amateur', 'Любитель', '1000'],
+      ['club', 'Клубный', '1400'], ['expert', 'Эксперт', '1800'],
+      ['master', 'Мастер', '2200'], ['singularity', 'Сингулярность', '2600+'],
+    ];
+    for (const [level, name, rating] of levels) {
+      document.getElementById('btn-play-variants')!.click();
+      document.querySelector<HTMLButtonElement>('[data-play-variant="three-check"]')!.click();
+      const modal = document.getElementById('variant-setup-modal')!;
+      modal.querySelector<HTMLButtonElement>('[data-opponent="ai"]')!.click();
+      modal.querySelector<HTMLButtonElement>('[data-color="white"]')!.click();
+      const buttons = modal.querySelectorAll<HTMLButtonElement>('#variant-level-group [data-bot-level]');
+      expect(buttons).toHaveLength(6);
+      const choice = modal.querySelector<HTMLButtonElement>(`[data-bot-level="${level}"]`)!;
+      expect(choice.textContent).toContain(name);
+      expect(choice.querySelector('strong')?.textContent).toBe(rating);
+      choice.click();
+      expect(choice.getAttribute('aria-pressed')).toBe('true');
+      expect(modal.querySelectorAll('#variant-level-group .active')).toHaveLength(1);
+      modal.querySelector<HTMLButtonElement>('#btn-variant-start')!.click();
+      expect(globalStore.getAILevel()).toBe(level);
+      expect(globalStore.getGameMode()).toBe('ai');
+      expect(globalStore.getLiveState().variant).toBe('three-check');
+      document.getElementById('btn-back-to-main')!.click();
+    }
+  });
+
   it.each([
     {
       variant: 'king-of-the-hill', reason: 'king-of-the-hill-center',

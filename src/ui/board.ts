@@ -1106,6 +1106,7 @@ export class ChessBoardUI {
   }
 
   private renderSolarWings(): void {
+    if (!this.store.supportsClassicalAnalysis()) return
     const isReview = this.store.isReviewMode()
     if (!isReview) return
     const activeVar = this.store.getActiveVariationNode()
@@ -1317,6 +1318,7 @@ export class ChessBoardUI {
   private renderMoveBadge(flipped: boolean): void {
     if (!this.badgeLayerEl) return
     this.badgeLayerEl.innerHTML = ''
+    if (!this.store.supportsClassicalAnalysis()) return
     if (this.hideBadges) return
 
     const activeVar = this.store.getActiveVariationNode()
@@ -1426,6 +1428,10 @@ export class ChessBoardUI {
   }
 
   private renderEvalBar(flipped: boolean): void {
+    if (!this.store.supportsClassicalAnalysis()) {
+      this.evalBarWrapperEl.style.display = 'none'
+      return
+    }
     if (this.externalScore !== null) {
       this.evalBarWrapperEl.style.display = 'flex'
       const whiteChance = Math.max(0, Math.min(100, winChance(this.externalScore)))
@@ -1489,6 +1495,7 @@ export class ChessBoardUI {
   private renderBestMoveArrow(flipped: boolean): void {
     if (!this.arrowLayerEl) return
     this.arrowLayerEl.innerHTML = ''
+    if (!this.store.supportsClassicalAnalysis()) return
 
     const activeVar = this.store.getActiveVariationNode()
     const review = this.store.getReviewResult()

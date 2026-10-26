@@ -666,6 +666,11 @@ export function initApp(): void {
     stopMenuAmbient(800);
     syncBgAnimState();
     document.body.classList.add('review-active');
+    const isReplay = !globalStore.supportsClassicalAnalysis();
+    reviewOverlay.classList.toggle('variant-replay-overlay', isReplay);
+    reviewOverlay.setAttribute('aria-label', isReplay ? 'Просмотр партии' : 'Разбор партии');
+    reviewOverlay.querySelector<HTMLElement>('.review-overlay-title')!.textContent = isReplay ? 'Просмотр партии' : 'Разбор партии';
+    document.getElementById('btn-close-review-overlay')?.setAttribute('aria-label', isReplay ? 'Закрыть просмотр' : 'Закрыть разбор');
     if (reviewSideCol && mobileTabs) {
       reviewSideCol.setAttribute('data-active-tab', 'moves');
       mobileTabs.querySelectorAll('.review-tab-btn').forEach((b) => {
@@ -703,6 +708,8 @@ export function initApp(): void {
     if (!isReviewOverlayOpen) return;
     isReviewOverlayOpen = false;
     document.body.classList.remove('review-active');
+    const wasReplay = globalStore.isReplayMode();
+    reviewOverlay.classList.remove('variant-replay-overlay');
     const screenGame = document.getElementById('screen-game');
     if (screenGame) {
       const isGame = currentRouter?.getRoute() === 'game';
@@ -721,6 +728,7 @@ export function initApp(): void {
       }
     }
     globalStore.setReviewMode(false);
+    if (wasReplay) globalStore.setViewIndex(null);
     gameBoardCol.insertBefore(boardMount, playerBarBottom);
     gameSidePanel.insertBefore(historyMount, sidePanelActions);
     reviewOverlay.style.display = 'none';
@@ -764,6 +772,12 @@ export function initApp(): void {
   modalMount.id = 'game-over-modal-mount';
   document.body.appendChild(modalMount);
   gameOverModal = new GameOverModalUI(modalMount, globalStore, {
+    onStartReplay: () => openReviewOverlay(),
+    onVariantsMenu: () => {
+      if (isReviewOverlayOpen) closeReviewOverlay(false);
+      globalStore.setActiveGame(false);
+      currentRouter?.navigate('variants');
+    },
     onStartReview: (options) => {
       openReviewOverlay(options);
     },
@@ -771,6 +785,10 @@ export function initApp(): void {
       globalStore.cancelReview();
       if (isReviewOverlayOpen) {
         closeReviewOverlay(false);
+      }
+      if (!globalStore.supportsClassicalAnalysis()) {
+        globalStore.newGame();
+        return;
       }
       globalStore.setActiveGame(false);
       currentRouter?.navigate('home');
@@ -904,8 +922,8 @@ export function initApp(): void {
     }
 
     if (isReview) {
-      statusText.textContent = 'Разбор партии';
-      badgeContainer.innerHTML = '<span class="status-badge badge-turn-white">Разбор</span>';
+      statusText.textContent = store.isReplayMode() ? 'Просмотр партии' : 'Разбор партии';
+      badgeContainer.innerHTML = `<span class="status-badge badge-turn-white">${store.isReplayMode() ? 'Просмотр' : 'Разбор'}</span>`;
       return;
     }
 

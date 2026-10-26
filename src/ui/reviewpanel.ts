@@ -1,7 +1,7 @@
 import { ChessStore } from '@/state/store';
 import { APP_NAME } from '@/config';
 import { ChessBoardUI } from './board';
-import type { Square } from '@/core';
+import { exportPGN, type Square } from '@/core';
 import {
   exportReviewedPGN,
   getMoveClassMeta,
@@ -86,6 +86,12 @@ export class ReviewPanelUI {
 
     this.container.innerHTML = `
       <div class="review-panel">
+        <section class="variant-replay-section solar-card" hidden>
+          <span class="variants-eyebrow">Партия в деталях</span>
+          <h3>Просмотр партии</h3>
+          <p>Выберите ход в списке или перемещайтесь по партии кнопками под доской.</p>
+          <button type="button" class="solar-btn-ghost" id="btn-copy-replay-pgn">Копировать PGN</button>
+        </section>
         <div class="review-progress-section solar-card" id="review-progress-section" style="display: none;">
           <div class="review-progress-header">
             <span class="review-progress-text" id="review-progress-text">Проанализировано 0 из 0 позиций (0%)</span>
@@ -324,6 +330,7 @@ export class ReviewPanelUI {
   }
 
   public async handleBestMoveClick(): Promise<void> {
+    if (!this.store.supportsClassicalAnalysis()) return;
     const isReview = this.store.isReviewMode();
     if (!isReview) return;
     if (this.isBestMoveLoading) return;
@@ -437,6 +444,9 @@ export class ReviewPanelUI {
   }
 
   private initEvents(): void {
+    this.container.querySelector('#btn-copy-replay-pgn')?.addEventListener('click', () => {
+      void this.copyReviewedPGN();
+    });
     this.cancelBtn.addEventListener('click', () => {
       this.cancelReview();
     });
@@ -447,6 +457,10 @@ export class ReviewPanelUI {
   }
 
   public async startReview(options?: { isDeep?: boolean; depth?: number; force?: boolean }): Promise<void> {
+    if (!this.store.supportsClassicalAnalysis()) {
+      this.startReplay();
+      return;
+    }
     const overlay = document.getElementById('review-overlay');
     if (overlay && !document.activeElement?.closest?.('.history-move')) {
       overlay.scrollTop = 0;
@@ -488,11 +502,28 @@ export class ReviewPanelUI {
     this.store.cancelReview();
   }
 
+  public startReplay(): void {
+    this.store.cancelReview();
+    this.store.setReviewMode(true);
+    this.store.setViewIndex(-1);
+  }
+
   private async copyReviewedPGN(): Promise<void> {
     const review = this.store.getReviewResult();
-    if (!review) return;
+    const isReplay = this.store.isReplayMode();
+    if (!isReplay && !review) return;
 
-    const pgn = exportReviewedPGN(this.store.getLiveState(), review, { Site: APP_NAME });
+    const result = this.store.getLiveGameResult();
+    const loser = this.store.getResignedPlayer() ?? this.store.getTimedOutLoser();
+    const winner = loser ? (loser === 'white' ? 'black' : 'white') : result.winner;
+    const pgn = isReplay
+      ? exportPGN(this.store.getLiveState(), {
+        Site: APP_NAME,
+        Result: winner ? (winner === 'white' ? '1-0' : '0-1') : this.store.isGameOver() ? '1/2-1/2' : '*',
+      })
+      : exportReviewedPGN(this.store.getLiveState(), review!, { Site: APP_NAME });
+    const copyBtn = isReplay
+      ? this.container.querySelector<HTMLButtonElement>('#btn-copy-replay-pgn')! : this.copyPgnBtn;
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(pgn);
@@ -504,10 +535,10 @@ export class ReviewPanelUI {
         document.execCommand('copy');
         document.body.removeChild(textarea);
       }
-      const prevText = this.copyPgnBtn.textContent;
-      this.copyPgnBtn.textContent = 'Скопировано';
+      const prevText = copyBtn.textContent;
+      copyBtn.textContent = 'Скопировано';
       setTimeout(() => {
-        this.copyPgnBtn.textContent = prevText;
+        copyBtn.textContent = prevText;
       }, 2000);
     } catch (err) {
       console.error('Failed to copy PGN:', err);
@@ -522,6 +553,21 @@ export class ReviewPanelUI {
       }
     } else {
       this.updateNavButtons();
+    }
+
+    const isVariant = !this.store.supportsClassicalAnalysis();
+    const replaySection = this.container.querySelector<HTMLElement>('.variant-replay-section')!;
+    replaySection.hidden = !this.store.isReplayMode();
+    if (this.bestMoveBtn) {
+      this.bestMoveBtn.hidden = isVariant;
+      this.bestMoveBtn.disabled = isVariant;
+    }
+    if (isVariant) {
+      this.progressSection.style.display = 'none';
+      this.resultsSection.style.display = 'none';
+      this.graphSvgEl.replaceChildren();
+      if (this.bestMoveToast) this.bestMoveToast.style.display = 'none';
+      return;
     }
 
     const isReviewing = this.store.isReviewInProgress();

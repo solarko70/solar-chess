@@ -36,6 +36,36 @@ const ICON_GRID = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const ICON_EDITOR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 const ICON_SOLAR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>`;
 
+const VARIANT_BOT_LEVELS = [
+  { id: 'novice', name: 'Новичок', rating: '600' },
+  { id: 'amateur', name: 'Любитель', rating: '1000' },
+  { id: 'club', name: 'Клубный', rating: '1400' },
+  { id: 'expert', name: 'Эксперт', rating: '1800' },
+  { id: 'master', name: 'Мастер', rating: '2200' },
+  { id: 'singularity', name: 'Сингулярность', rating: '2600+' },
+] as const;
+
+const VARIANTS_SPACE_BACKGROUND = `
+  <div class="variants-space-bg" aria-hidden="true">
+    <svg class="variants-space-orbits" viewBox="0 0 1440 1000" fill="none" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g class="variants-orbit-lines" transform="rotate(-24 1080 280)">
+        <ellipse cx="1080" cy="280" rx="320" ry="140"/>
+        <ellipse cx="1080" cy="280" rx="490" ry="220"/>
+        <ellipse cx="1080" cy="280" rx="650" ry="310" stroke-dasharray="3 12"/>
+      </g>
+      <g class="variants-orbit-lines"><ellipse cx="80" cy="900" rx="410" ry="170" transform="rotate(25 80 900)"/></g>
+      <g class="variants-constellation-lines"><path d="m75 170 95 40 60-85 90 55m-155 490 90 30 70-95 85 50m680 60 85 50 105-75 70 45"/></g>
+      <g class="variants-space-stars" fill="currentColor">
+        <circle cx="75" cy="170" r="2"/><circle cx="170" cy="210" r="3"/><circle cx="230" cy="125" r="2"/><circle cx="320" cy="180" r="2"/>
+        <circle cx="165" cy="670" r="2"/><circle cx="255" cy="700" r="3"/><circle cx="325" cy="605" r="2"/><circle cx="410" cy="655" r="2"/>
+        <circle cx="1090" cy="715" r="3"/><circle cx="1175" cy="765" r="2"/><circle cx="1280" cy="690" r="3"/><circle cx="1350" cy="735" r="2"/>
+        <circle cx="570" cy="80" r="1"/><circle cx="850" cy="165" r="1.5"/><circle cx="610" cy="850" r="1.5"/><circle cx="930" cy="940" r="1"/>
+        <circle cx="60" cy="470" r="1.5"/><circle cx="1390" cy="380" r="1.5"/><circle cx="750" cy="490" r="1"/>
+      </g>
+      <circle cx="1180" cy="74" r="7" class="variants-orbit-planet"/>
+    </svg>
+  </div>`;
+
 export const POPULAR_VARIANTS: VariantCardInfo[] = [
   {
     id: 'king-of-the-hill',
@@ -193,10 +223,8 @@ export class VariantSetupModal {
 
           <div class="setup-section" id="variant-bot-level-section">
             <label class="setup-label">Уровень бота</label>
-            <div class="variant-segmented-row" id="variant-level-group">
-              <button type="button" class="variant-seg-btn" data-bot-level="novice">Новичок</button>
-              <button type="button" class="variant-seg-btn active" data-bot-level="amateur">Любитель</button>
-              <button type="button" class="variant-seg-btn" data-bot-level="master">Мастер</button>
+            <div class="variant-segmented-row variant-level-grid" id="variant-level-group" role="group" aria-label="Уровень бота">
+              ${VARIANT_BOT_LEVELS.map((bot) => `<button type="button" class="variant-seg-btn variant-level-card" data-bot-level="${bot.id}" aria-pressed="false"><span>${bot.name}</span><strong>${bot.rating}</strong></button>`).join('')}
             </div>
           </div>
 
@@ -256,7 +284,7 @@ export class VariantSetupModal {
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-bot-level]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const lvl = btn.getAttribute('data-bot-level') as LevelId | null;
-        if (lvl) {
+        if (lvl && VARIANT_BOT_LEVELS.some((bot) => bot.id === lvl)) {
           this.level = lvl;
           this.syncUI();
         }
@@ -315,7 +343,9 @@ export class VariantSetupModal {
     }
 
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-bot-level]').forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-bot-level') === this.level);
+      const active = btn.getAttribute('data-bot-level') === this.level;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
     });
 
     this.overlay.querySelectorAll<HTMLButtonElement>('[data-color]').forEach((btn) => {
@@ -441,6 +471,7 @@ export class VariantsUI {
     const fairyGrid = FAIRY_VARIANTS.map((c) => this.renderCard(c)).join('');
 
     this.container.innerHTML = `
+      ${VARIANTS_SPACE_BACKGROUND}
       <div class="variants-page">
         <div class="variants-header">
           <button type="button" class="variants-back-btn" id="variants-back">
@@ -457,7 +488,7 @@ export class VariantsUI {
             <p class="variants-intro">Займите вершину. Объявите три шаха. Найдите свою орбиту игры.</p>
             <div class="variants-hero-stats"><span><strong>02</strong> режима доступны</span><span>Одна доска — новые стратегии</span></div>
           </div>
-          <div class="variants-hero-orbit" aria-hidden="true">${ICON_SOLAR}<span>64</span></div>
+          <div class="variants-hero-orbit" aria-hidden="true">${ICON_SOLAR}</div>
         </div>
 
         <div class="variants-tabs" role="tablist" aria-label="Категории шахматных вариаций">
