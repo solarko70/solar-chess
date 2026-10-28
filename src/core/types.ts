@@ -2,7 +2,7 @@
 export type Color = 'white' | 'black';
 export type PieceType = 'pawn' | 'knight' | 'bishop' | 'rook' | 'queen' | 'king';
 export type Square = number; // y * width + x
-export type VariantId = 'standard' | 'king-of-the-hill' | 'three-check';
+export type VariantId = 'standard' | 'king-of-the-hill' | 'three-check' | 'chess-960';
 
 export interface ChecksCount {
   white: number;
@@ -28,9 +28,17 @@ export interface Board {
 }
 
 // ── CastlingRights ───────────────────────────────────────────────────────────
+export interface SideCastlingRights {
+  kingside: boolean;
+  queenside: boolean;
+  kingFrom?: Square;
+  kingsideRook?: Square;
+  queensideRook?: Square;
+}
+
 export interface CastlingRights {
-  white: { kingside: boolean; queenside: boolean };
-  black: { kingside: boolean; queenside: boolean };
+  white: SideCastlingRights;
+  black: SideCastlingRights;
 }
 
 // ── Move (full object — sufficient for undo without a separate stack) ─────────
@@ -50,6 +58,7 @@ export interface Move {
   // flags
   promotion?: PieceType;
   castling?: 'kingside' | 'queenside';
+  castlingRookFrom?: Square;
   isEnPassant?: boolean;
 }
 

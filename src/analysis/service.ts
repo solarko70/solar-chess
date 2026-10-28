@@ -191,7 +191,7 @@ export async function runGameReview(
   // Case 4: Standard 8x8 board -> try StockfishEngine
   let sfEngine: StockfishEngine | null = null;
   try {
-    sfEngine = new StockfishEngine();
+    sfEngine = new StockfishEngine({ chess960: states[0].variant === 'chess-960' });
     const result = await reviewGame(states, sfEngine, {
       mode: options.mode,
       depth: targetDepth,

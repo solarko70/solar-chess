@@ -54,8 +54,8 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
     const popularCards = popularPanel.querySelectorAll('.variant-card');
     expect(popularCards).toHaveLength(9);
     const playBtns = popularPanel.querySelectorAll('[data-play-variant]');
-    expect(playBtns).toHaveLength(2);
-    expect(popularPanel.querySelectorAll('.variant-wip-badge')).toHaveLength(7);
+    expect(playBtns).toHaveLength(3);
+    expect(popularPanel.querySelectorAll('.variant-wip-badge')).toHaveLength(6);
 
     // Switch to Fairy Chess
     fairyTab.click();
@@ -129,10 +129,10 @@ describe('Stage 13a: Variants Hub (#/variants) & VariantSetupModal', () => {
   it('renders solar card status, SVG icons and accessible sliding tabs', () => {
     document.getElementById('btn-play-variants')!.click();
     const panel = document.getElementById('tab-panel-popular')!;
-    expect(panel.querySelectorAll('.variant-card-top .variant-ready-badge')).toHaveLength(2);
-    expect(panel.querySelectorAll('.variant-card-top .variant-wip-badge')).toHaveLength(7);
+    expect(panel.querySelectorAll('.variant-card-top .variant-ready-badge')).toHaveLength(3);
+    expect(panel.querySelectorAll('.variant-card-top .variant-wip-badge')).toHaveLength(6);
     expect(panel.querySelectorAll('.variant-card-icon svg')).toHaveLength(9);
-    expect(panel.querySelectorAll('.variant-play-btn svg')).toHaveLength(2);
+    expect(panel.querySelectorAll('.variant-play-btn svg')).toHaveLength(3);
     expect(panel.querySelector('[data-variant-card="king-of-the-hill"] .variant-card-goal')?.textContent)
       .toBe('4 клетки до вершины');
     expect(document.querySelector('.variants-hero .variants-intro')).not.toBeNull();

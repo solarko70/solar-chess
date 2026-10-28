@@ -13,6 +13,7 @@ import type {
 export type { VariantId, ChecksCount } from '@/core';
 import {
   classicalRuleSet,
+  createChess960State,
   parseFEN,
   parsePGN,
   serializeFEN,
@@ -190,7 +191,7 @@ export class ChessStore {
   }
 
   getStateAtPly(ply: number): GameState {
-    if (!this.supportsClassicalAnalysis()) {
+    if (!this.supportsClassicalAnalysis() || this.variant === 'chess-960') {
       let position = this.state;
       const historyLength = Math.max(0, ply + 1);
       while (position.history.length > historyLength) {
@@ -470,7 +471,7 @@ export class ChessStore {
         return;
       }
 
-      this.applyMoveInternal(res.move.from, res.move.to, res.move.promotion ?? 'queen');
+      this.applyMoveInternal(res.move.from, res.move.castlingRookFrom ?? res.move.to, res.move.promotion ?? 'queen');
     };
 
     const targetDelay = calculateBotThinkDelay(this.state, res.move, {
@@ -735,7 +736,7 @@ export class ChessStore {
 
     // Explicit match options take precedence over an imported position's defaults.
     this.variant = options?.variant ?? initialState?.variant ?? this.variant;
-    const baseState = initialState ?? this.ruleSet.getInitialState();
+    const baseState = initialState ?? (this.variant === 'chess-960' ? createChess960State() : this.ruleSet.getInitialState());
     this.state = {
       ...baseState,
       variant: this.variant,
@@ -841,12 +842,12 @@ export class ChessStore {
     const matched = legalMoves.find(
       (m) =>
         m.from === pm.from &&
-        m.to === pm.to &&
+        (m.castlingRookFrom ?? m.to) === pm.to &&
         (pm.promotion ? m.promotion === pm.promotion : true),
     );
     if (matched) {
       this.premoveQueue.shift();
-      return this.makeMove(matched.from, matched.to, matched.promotion);
+      return this.makeMove(matched.from, matched.castlingRookFrom ?? matched.to, matched.promotion);
     }
     // Illegal move: clear entire queue
     this.clearPremoves();
@@ -904,7 +905,7 @@ export class ChessStore {
     }
 
     const legalMoves = this.getLegalMoves();
-    const candidateMoves = legalMoves.filter((m) => m.from === from && m.to === to);
+    const candidateMoves = legalMoves.filter((m) => m.from === from && (m.castlingRookFrom ?? m.to) === to);
 
     if (candidateMoves.length === 0) {
       this.selectedSquare = null;
@@ -1160,7 +1161,7 @@ export class ChessStore {
       }
     }
     const moves = this.getLegalMoves();
-    return moves.filter((m) => m.from === sq).map((m) => m.to);
+    return moves.filter((m) => m.from === sq).map((m) => m.castlingRookFrom ?? m.to);
   }
 
   getLastMove(): Move | null {
@@ -1293,7 +1294,7 @@ export class ChessStore {
   canReview(): boolean {
     if (!this.supportsClassicalAnalysis()) return false;
     if (this.isReviewing) return false;
-    return this.state.history.length >= 2;
+    return this.state.history.length >= (this.variant === 'chess-960' ? 1 : 2);
   }
 
   getReviewError(): string | null {
@@ -1343,7 +1344,7 @@ export class ChessStore {
         return this.reviewResult;
       }
     }
-    if (this.state.history.length < 2) {
+    if (this.state.history.length < (this.variant === 'chess-960' ? 1 : 2)) {
       return null;
     }
     if (this.isReviewing) {
@@ -1611,7 +1612,7 @@ export class ChessStore {
     const legalMoves = this.ruleSet.generateLegalMoves
       ? this.ruleSet.generateLegalMoves(currentState)
       : this.ruleSet.generateMoves(currentState);
-    const candidateMoves = legalMoves.filter((m) => m.from === from && m.to === to);
+    const candidateMoves = legalMoves.filter((m) => m.from === from && (m.castlingRookFrom ?? m.to) === to);
 
     if (candidateMoves.length === 0) {
       this.selectedSquare = null;
@@ -1643,11 +1644,7 @@ export class ChessStore {
       const nextPly = currentPly + 1;
       if (nextPly < this.state.history.length) {
         const nextMainMove = this.state.history[nextPly];
-        if (
-          chosenMove.from === nextMainMove.from &&
-          chosenMove.to === nextMainMove.to &&
-          chosenMove.promotion === nextMainMove.promotion
-        ) {
+        if (isSameMove(chosenMove, nextMainMove)) {
           this.selectedSquare = null;
           this.pendingPromotion = null;
           this.setViewIndex(nextPly);
@@ -1669,10 +1666,7 @@ export class ChessStore {
 
       // Check if child already exists with this move
       const existingChild = currentActive.children.find(
-        (c) =>
-          c.move.from === chosenMove.from &&
-          c.move.to === chosenMove.to &&
-          c.move.promotion === chosenMove.promotion,
+        (c) => isSameMove(c.move, chosenMove),
       );
       if (existingChild) {
         this.activeVariationId = existingChild.id;
@@ -1689,9 +1683,7 @@ export class ChessStore {
       const existingRoot = this.variations.find(
         (v) =>
           v.rootPly === rootPly &&
-          v.move.from === chosenMove.from &&
-          v.move.to === chosenMove.to &&
-          v.move.promotion === chosenMove.promotion,
+          isSameMove(v.move, chosenMove),
       );
       if (existingRoot) {
         this.activeVariationId = existingRoot.id;
@@ -1823,10 +1815,7 @@ export class ChessStore {
       : this.ruleSet.generateMoves(stateBefore);
 
     const matchedLegal = legalMoves.find(
-      (m) =>
-        m.from === bestMove.from &&
-        m.to === bestMove.to &&
-        m.promotion === bestMove.promotion,
+      (m) => isSameMove(m, bestMove),
     );
     if (!matchedLegal) return null;
 
@@ -1835,10 +1824,7 @@ export class ChessStore {
 
     if (parentNode) {
       const existing = parentNode.children.find(
-        (c) =>
-          c.move.from === matchedLegal.from &&
-          c.move.to === matchedLegal.to &&
-          c.move.promotion === matchedLegal.promotion,
+        (c) => isSameMove(c.move, matchedLegal),
       );
       if (existing) {
         existing.class = existing.class ?? 'best';
@@ -1850,9 +1836,7 @@ export class ChessStore {
       const existing = this.variations.find(
         (v) =>
           v.rootPly === rootPly &&
-          v.move.from === matchedLegal.from &&
-          v.move.to === matchedLegal.to &&
-          v.move.promotion === matchedLegal.promotion,
+          isSameMove(v.move, matchedLegal),
       );
       if (existing) {
         existing.class = existing.class ?? 'best';

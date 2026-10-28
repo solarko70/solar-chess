@@ -7,10 +7,10 @@ import { classicalRuleSet } from '../rules/classical';
 export function exportPGN(state: GameState, metadata?: Record<string, string>): string {
   let initialState = classicalRuleSet.getInitialState();
   const variantHeaders: Record<string, string> = {};
-  if (state.variant === 'king-of-the-hill' || state.variant === 'three-check') {
+  if (state.variant === 'king-of-the-hill' || state.variant === 'three-check' || state.variant === 'chess-960') {
     initialState = state;
     while (initialState.history.length) initialState = undoMove(initialState);
-    variantHeaders.Variant = state.variant === 'king-of-the-hill' ? 'King of the Hill' : 'Three-check';
+    variantHeaders.Variant = state.variant === 'chess-960' ? 'Chess960' : state.variant === 'king-of-the-hill' ? 'King of the Hill' : 'Three-check';
     if (serializeFEN(initialState) !== serializeFEN(classicalRuleSet.getInitialState())) {
       variantHeaders.SetUp = '1';
       variantHeaders.FEN = serializeFEN(initialState);
@@ -87,18 +87,20 @@ export function parsePGN(pgnText: string): { headers: Record<string, string>; st
   let text = pgnText.replace(/\[[\s\S]*?\]/g, '');
   text = text.replace(/\{[\s\S]*?\}/g, '');
   text = text.replace(/\([^)]*\)/g, '');
+  text = text.replace(/\$\d+/g, '');
   text = text.replace(/\d+\.(\.\.)?/g, '');
   text = text.replace(/(1-0|0-1|1\/2-1\/2|\*)/g, '');
 
   const tokens = text.trim().split(/\s+/).filter(Boolean);
 
   const variant = headers.Variant === 'King of the Hill' ? 'king-of-the-hill'
-    : headers.Variant === 'Three-check' ? 'three-check' : 'standard';
+    : headers.Variant === 'Three-check' ? 'three-check'
+      : /^(Chess\s?960|Fischerandom)$/i.test(headers.Variant ?? '') ? 'chess-960' : 'standard';
   let state: GameState = headers.SetUp === '1' && headers.FEN
     ? parseFEN(headers.FEN, 8, 8, variant)
     : { ...classicalRuleSet.getInitialState(), variant };
   for (const token of tokens) {
-    const move = sanToMove(state, token);
+    const move = sanToMove(state, token.replace(/[!?]+$/, ''));
     if (!move) {
       throw new Error(`Failed to parse SAN move in PGN: "${token}"`);
     }

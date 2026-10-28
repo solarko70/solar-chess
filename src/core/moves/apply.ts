@@ -7,8 +7,8 @@ import { isInCheck } from './legal';
 
 export function copyCastling(c: CastlingRights): CastlingRights {
   return {
-    white: { kingside: c.white.kingside, queenside: c.white.queenside },
-    black: { kingside: c.black.kingside, queenside: c.black.queenside },
+    white: { ...c.white },
+    black: { ...c.black },
   };
 }
 
@@ -23,12 +23,12 @@ function updateCastlingRights(
   const whiteBack = height - 1;
   const blackBack = 0;
 
-  const wK = toSquare(4, whiteBack, width);
-  const bK = toSquare(4, blackBack, width);
-  const wRk = toSquare(7, whiteBack, width);
-  const wRq = toSquare(0, whiteBack, width);
-  const bRk = toSquare(7, blackBack, width);
-  const bRq = toSquare(0, blackBack, width);
+  const wK = rights.white.kingFrom ?? toSquare(4, whiteBack, width);
+  const bK = rights.black.kingFrom ?? toSquare(4, blackBack, width);
+  const wRk = rights.white.kingsideRook ?? toSquare(7, whiteBack, width);
+  const wRq = rights.white.queensideRook ?? toSquare(0, whiteBack, width);
+  const bRk = rights.black.kingsideRook ?? toSquare(7, blackBack, width);
+  const bRq = rights.black.queensideRook ?? toSquare(0, blackBack, width);
 
   if (from === wK || from === wRk || to === wRk) r.white.kingside = false;
   if (from === wK || from === wRq || to === wRq) r.white.queenside = false;
@@ -65,7 +65,12 @@ export function applyMove(state: GameState, move: Move): GameState {
   // Castling rook movement
   if (move.castling) {
     const backRank = move.piece.color === 'white' ? height - 1 : 0;
-    if (move.castling === 'kingside') {
+    if (move.castlingRookFrom !== undefined) {
+      newBoard.pieces[move.from] = null;
+      newBoard.pieces[move.castlingRookFrom] = null;
+      newBoard.pieces[toSquare(move.castling === 'kingside' ? 5 : 3, backRank, width)] = { type: 'rook', color: move.piece.color };
+      newBoard.pieces[move.to] = move.piece;
+    } else if (move.castling === 'kingside') {
       newBoard.pieces[toSquare(7, backRank, width)] = null;
       newBoard.pieces[toSquare(5, backRank, width)] = { type: 'rook', color: move.piece.color };
     } else {
@@ -169,7 +174,12 @@ export function undoMove(state: GameState): GameState {
   // Undo castling rook
   if (move.castling) {
     const backRank = move.piece.color === 'white' ? height - 1 : 0;
-    if (move.castling === 'kingside') {
+    if (move.castlingRookFrom !== undefined) {
+      newBoard.pieces[move.to] = null;
+      newBoard.pieces[toSquare(move.castling === 'kingside' ? 5 : 3, backRank, width)] = null;
+      newBoard.pieces[move.from] = move.piece;
+      newBoard.pieces[move.castlingRookFrom] = { type: 'rook', color: move.piece.color };
+    } else if (move.castling === 'kingside') {
       newBoard.pieces[toSquare(5, backRank, width)] = null;
       newBoard.pieces[toSquare(7, backRank, width)] = { type: 'rook', color: move.piece.color };
     } else {

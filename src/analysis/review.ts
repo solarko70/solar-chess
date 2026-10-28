@@ -249,7 +249,7 @@ export async function reviewGame(
 
   const states = reconstructGameStates(game);
   const totalPositions = states.length;
-  const identifiedOpening = identifyOpening(states);
+  const identifiedOpening = states[0].variant === 'chess-960' ? null : identifyOpening(states);
   const ownCreated = !engine;
   const activeEngine = engine ?? createEngine(states[0]);
 

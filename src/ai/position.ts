@@ -10,7 +10,7 @@
  * Works for any board size up to 1024 squares (moves are packed into 31-bit ints).
  */
 import type { GameState, Move, PieceType, VariantId } from '@/core';
-import { parseFEN } from '@/core';
+import { parseFEN, canCastle960 } from '@/core';
 
 // ── Piece codes ─────────────────────────────────────────────────────────────
 // Board cell value: 0 = empty, +type = white piece, -type = black piece.
@@ -259,6 +259,8 @@ export class Position {
   checksW = 0;
   checksB = 0;
   readonly kingSq = new Int32Array([-1, -1]);
+  private readonly castleRooks = new Int32Array(4);
+  private castleMask = new Int32Array(0);
 
   // Undo stack
   private ply = 0;
@@ -295,7 +297,7 @@ export class Position {
     const prevLo: number[] = [];
     for (let i = 0; i < keys.length - 1; i++) {
       const tmp = new Position(width, height);
-      tmp.loadState(parseFEN(keys[i], width, height));
+      tmp.loadState(parseFEN(keys[i], width, height, state.variant));
       prevHi.push(tmp.hashHi);
       prevLo.push(tmp.hashLo);
     }
@@ -326,6 +328,22 @@ export class Position {
     }
     this.side = state.turn === 'white' ? WHITE : BLACK;
     const cr = state.castlingRights;
+    this.castleRooks.set([
+      cr.white.kingsideRook ?? (this.height - 1) * this.width + 7,
+      cr.white.queensideRook ?? (this.height - 1) * this.width,
+      cr.black.kingsideRook ?? 7,
+      cr.black.queensideRook ?? 0,
+    ]);
+    this.castleMask = new Int32Array(this.geo.castleMask);
+    if (state.variant === 'chess-960') {
+      this.castleMask.fill(0);
+      for (let i = 0; i < 4; i++) {
+        const rook = this.castleRooks[i];
+        if (rook >= 0 && rook < this.board.length) this.castleMask[rook] |= 1 << i;
+      }
+      if (cr.white.kingFrom !== undefined) this.castleMask[cr.white.kingFrom] |= CR_WK | CR_WQ;
+      if (cr.black.kingFrom !== undefined) this.castleMask[cr.black.kingFrom] |= CR_BK | CR_BQ;
+    }
     this.castling =
       (cr.white.kingside ? CR_WK : 0) |
       (cr.white.queenside ? CR_WQ : 0) |
@@ -555,6 +573,20 @@ export class Position {
     if (W < 8) return;
     const us = this.side;
     const back = us === WHITE ? this.height - 1 : 0;
+    if (this.variant === 'chess-960') {
+      if (!(this.castling & (us === WHITE ? 3 : 12))) return;
+      const board = {
+        width: W, height: this.height,
+        pieces: Array.from(this.board, (p) => p === 0 ? null : { type: CODE_TYPE[Math.abs(p)], color: p > 0 ? 'white' as const : 'black' as const }),
+      };
+      for (let side = 0; side < 2; side++) {
+        const i = us * 2 + side;
+        if ((this.castling & (1 << i)) && canCastle960(board, us === WHITE ? 'white' : 'black', sq, this.castleRooks[i], side === 0 ? 'kingside' : 'queenside')) {
+          out.push(encodeMove(sq, back * W + (side === 0 ? 6 : 2), 0, side === 0 ? FLAG_CASTLE_K : FLAG_CASTLE_Q));
+        }
+      }
+      return;
+    }
     if (sq !== back * W + 4) return;
     const b = this.board;
     const them = us ^ 1;
@@ -582,6 +614,7 @@ export class Position {
   // ── Make / unmake ─────────────────────────────────────────────────────────
   /** Piece captured by the move (0 if none). Must be called before make(). */
   capturedBy(m: number): number {
+    if (moveFlag(m) === FLAG_CASTLE_K || moveFlag(m) === FLAG_CASTLE_Q) return 0;
     if (moveFlag(m) === FLAG_EP) return this.side === WHITE ? -PAWN : PAWN;
     return this.board[moveTo(m)];
   }
@@ -622,7 +655,8 @@ export class Position {
 
     let capSq = to;
     if (flag === FLAG_EP) capSq = to + (us === WHITE ? W : -W);
-    const captured = b[capSq];
+    const isCastle = flag === FLAG_CASTLE_K || flag === FLAG_CASTLE_Q;
+    const captured = isCastle ? 0 : b[capSq];
     this.uCaptured[u] = captured;
 
     let zi = zIndex(from, piece);
@@ -634,6 +668,10 @@ export class Position {
       lo ^= g.zPieceLo[zi];
       b[capSq] = 0;
     }
+    if (isCastle) {
+      const rFrom = this.castleRooks[us * 2 + (flag === FLAG_CASTLE_K ? 0 : 1)];
+      b[rFrom] = 0;
+    }
     const placed = promo ? s * promo : piece;
     b[from] = 0;
     b[to] = placed;
@@ -643,10 +681,9 @@ export class Position {
 
     if (flag === FLAG_CASTLE_K || flag === FLAG_CASTLE_Q) {
       const base = (us === WHITE ? this.height - 1 : 0) * W;
-      const rFrom = flag === FLAG_CASTLE_K ? base + 7 : base;
+      const rFrom = this.castleRooks[us * 2 + (flag === FLAG_CASTLE_K ? 0 : 1)];
       const rTo = flag === FLAG_CASTLE_K ? base + 5 : base + 3;
       const rook = s * ROOK;
-      b[rFrom] = 0;
       b[rTo] = rook;
       zi = zIndex(rFrom, rook);
       hi ^= g.zPieceHi[zi];
@@ -658,7 +695,7 @@ export class Position {
 
     if (piece === s * KING) this.kingSq[us] = to;
 
-    this.castling &= ~(g.castleMask[from] | g.castleMask[to]);
+    this.castling &= ~(this.castleMask[from] | this.castleMask[to]);
     // En passant square is the square the pawn jumped over
     this.ep = flag === FLAG_DOUBLE ? to + (us === WHITE ? W : -W) : -1;
     this.halfmove = captured !== 0 || piece === s * PAWN ? 0 : this.halfmove + 1;
@@ -706,9 +743,11 @@ export class Position {
 
     if (flag === FLAG_CASTLE_K || flag === FLAG_CASTLE_Q) {
       const base = (us === WHITE ? this.height - 1 : 0) * W;
-      const rFrom = flag === FLAG_CASTLE_K ? base + 7 : base;
+      const rFrom = this.castleRooks[us * 2 + (flag === FLAG_CASTLE_K ? 0 : 1)];
       const rTo = flag === FLAG_CASTLE_K ? base + 5 : base + 3;
+      b[to] = 0;
       b[rTo] = 0;
+      b[from] = s * KING;
       b[rFrom] = s * ROOK;
     }
 
@@ -765,6 +804,8 @@ export class Position {
 /** Does the internal move correspond to the given core Move? */
 export function sameMove(m: number, move: Move): boolean {
   if (moveFrom(m) !== move.from || moveTo(m) !== move.to) return false;
+  if ((moveFlag(m) === FLAG_CASTLE_K) !== (move.castling === 'kingside') ||
+      (moveFlag(m) === FLAG_CASTLE_Q) !== (move.castling === 'queenside')) return false;
   const promo = movePromo(m);
   const corePromo = move.promotion ? TYPE_CODE[move.promotion] : 0;
   return promo === corePromo;

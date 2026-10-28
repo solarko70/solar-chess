@@ -141,7 +141,7 @@ const SEVERITY_ORDER: Record<MoveClass, number> = {
 /** Check whether two Move objects represent the same chess move (origin, target, promotion). */
 export function isSameMove(a: Move | null | undefined, b: Move | null | undefined): boolean {
   if (!a || !b) return false;
-  return a.from === b.from && a.to === b.to && (a.promotion ?? undefined) === (b.promotion ?? undefined);
+  return a.from === b.from && a.to === b.to && a.castling === b.castling && (a.promotion ?? undefined) === (b.promotion ?? undefined);
 }
 
 /** Check whether `score` (White's perspective) is a forced mate against `moverColor`. */

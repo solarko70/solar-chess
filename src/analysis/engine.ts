@@ -24,6 +24,8 @@ import {
 
 export interface EngineAnalyzeOptions {
   depth?: number;
+  timeMs?: number;
+  skillLevel?: number;
   multiPV?: number;
   signal?: AbortSignal;
   onUpdate?: (partial: AnalysisEngineResult) => void;
@@ -197,7 +199,7 @@ export function parseUCIBestMove(line: string): ParsedUCIBestMove | null {
 /** Convert a core Move on an 8x8 board to UCI coordinate notation (e.g. `e2e4`, `e7e8q`). */
 export function moveToUCI(move: Move, width = 8, height = 8): string {
   const fromC = toCoords(move.from, width);
-  const toC = toCoords(move.to, width);
+  const toC = toCoords(move.castlingRookFrom ?? move.to, width);
   const fromStr = `${String.fromCharCode(97 + fromC.x)}${height - fromC.y}`;
   const toStr = `${String.fromCharCode(97 + toC.x)}${height - toC.y}`;
   const promoStr = move.promotion ? PIECE_TO_PROMO_CHAR[move.promotion] : '';
@@ -225,6 +227,9 @@ export function uciToMove(state: GameState, uci: string): Move | null {
   const promoType = promoChar ? PROMO_CHAR_TO_PIECE[promoChar] : undefined;
 
   const legal = generateLegal(state);
+  if (state.variant === 'chess-960') {
+    return legal.find((m) => m.from === fromSq && (m.castlingRookFrom ?? m.to) === toSq && (m.promotion ?? undefined) === promoType) ?? null;
+  }
   const direct = legal.find(
     (m) => m.from === fromSq && m.to === toSq && (m.promotion ?? undefined) === promoType,
   );
@@ -232,7 +237,8 @@ export function uciToMove(state: GameState, uci: string): Move | null {
 
   // Handle Chess960 / king-captures-own-rook castling notation if emitted by UCI
   const piece = state.board.pieces[fromSq];
-  if (piece?.type === 'king' && fromY === toY) {
+  const target = state.board.pieces[toSq];
+  if (piece?.type === 'king' && target?.type === 'rook' && target.color === piece.color && fromY === toY) {
     const isKingside = toX > fromX;
     const castleMove = legal.find(
       (m) => m.from === fromSq && m.castling === (isKingside ? 'kingside' : 'queenside'),
@@ -590,6 +596,11 @@ export class StockfishEngine implements AnalysisEngine {
     const legal = generateLegal(state);
 
     const w = await this.ensureWorker();
+    const chess960 = state.variant === 'chess-960';
+    if (chess960 !== this.chess960) {
+      w.postMessage(`setoption name UCI_Chess960 value ${chess960}`);
+      this.chess960 = chess960;
+    }
     if (options.signal?.aborted) {
       throw createAbortError();
     }
@@ -743,7 +754,7 @@ export class StockfishEngine implements AnalysisEngine {
             phase = 'searching';
             this.isSearching = true;
             w.postMessage(`position fen ${fen}`);
-            w.postMessage(`go depth ${depth}`);
+            w.postMessage(`go depth ${depth}${options.timeMs === undefined ? '' : ` movetime ${Math.max(1, Math.floor(options.timeMs))}`}`);
           }
           return;
         }
@@ -829,6 +840,7 @@ export class StockfishEngine implements AnalysisEngine {
         // Clear hash / reset search state before each position for reproducible evaluations
         w.postMessage('ucinewgame');
         w.postMessage(`setoption name MultiPV value ${multiPV}`);
+        if (options.skillLevel !== undefined) w.postMessage(`setoption name Skill Level value ${options.skillLevel}`);
         w.postMessage('isready');
       } catch (err) {
         finishReject(err);
@@ -925,7 +937,7 @@ export function createEngine(state?: GameState, options: CreateEngineOptions = {
   }
   const sf = new StockfishEngine({
     workerFactory: options.workerFactory,
-    chess960: options.chess960,
+    chess960: options.chess960 ?? state?.variant === 'chess-960',
   });
   return new FallbackEngine(sf, new OwnEngine());
 }

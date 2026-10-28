@@ -92,6 +92,7 @@ export const POPULAR_VARIANTS: VariantCardInfo[] = [
     title: 'Chess 960',
     subtitle: 'Шахматы Фишера',
     description: 'Случайная симметричная расстановка фигур на первой и восьмой горизонталях из 960 стартовых позиций.',
+    playableVariant: 'chess-960',
     iconSvg: ICON_960,
   },
   {
@@ -173,6 +174,7 @@ export const VARIANT_DISPLAY_NAMES: Record<VariantId, string> = {
   'standard': 'Классические шахматы',
   'king-of-the-hill': 'King of the Hill (Царь горы)',
   'three-check': 'Three-Check (Три шаха)',
+  'chess-960': 'Chess 960 (Шахматы Фишера)',
 };
 
 export class VariantSetupModal {
@@ -209,6 +211,12 @@ export class VariantSetupModal {
 
     this.overlay.innerHTML = `
       <div class="variant-setup-card">
+        <div class="variant-setup-cosmos" aria-hidden="true">
+          <svg viewBox="0 0 620 860" fill="none" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <g class="variant-setup-orbits"><ellipse cx="570" cy="70" rx="250" ry="150" transform="rotate(-28 570 70)"/><ellipse cx="570" cy="70" rx="310" ry="210" transform="rotate(-28 570 70)"/><path d="m20 615 65-43 58 22 74-70"/></g>
+            <g class="variant-setup-stars">${Array.from({ length: 30 }, (_, i) => `<circle cx="${18 + (i * 137) % 582}" cy="${20 + (i * 191) % 820}" r="${i % 5 === 0 ? 1.7 : 0.9}" style="--star-delay: -${i % 9}s; --star-duration: ${6 + i % 5}s"/>`).join('')}</g>
+          </svg>
+        </div>
         <div class="variant-setup-header">
           <h3 class="variant-setup-title" id="variant-setup-title">Настройка матча: King of the Hill</h3>
           <button type="button" class="modal-close-btn" id="variant-modal-close" aria-label="Закрыть">
@@ -216,6 +224,7 @@ export class VariantSetupModal {
           </button>
         </div>
         <div class="variant-setup-body">
+          <p class="variant-960-hint" hidden>960 стартовых позиций · новая расстановка в каждой партии. Для рокировки выберите короля, затем свою ладью.</p>
           <div class="setup-section">
             <label class="setup-label">Выбор соперника</label>
             <div class="variant-segmented-row" id="variant-opponent-group">
@@ -333,6 +342,7 @@ export class VariantSetupModal {
     if (!this.overlay) return;
 
     const titleEl = this.overlay.querySelector('#variant-setup-title');
+    this.overlay.querySelector<HTMLElement>('.variant-960-hint')!.hidden = this.currentVariant !== 'chess-960';
     if (titleEl) {
       titleEl.textContent = `Настройка матча: ${VARIANT_DISPLAY_NAMES[this.currentVariant]}`;
     }
@@ -455,7 +465,7 @@ export class VariantsUI {
       : '<span class="variant-wip-badge">В разработке</span>';
     const goalMarkup = card.playableVariant === 'king-of-the-hill'
       ? '4 клетки до вершины'
-      : card.playableVariant === 'three-check' ? '3 шаха до победы' : 'Новые возможности';
+      : card.playableVariant === 'three-check' ? '3 шаха до победы' : card.playableVariant === 'chess-960' ? '960 стартовых позиций' : 'Новые возможности';
 
     return `
       <article class="variant-card ${isPlayable ? 'variant-card-playable' : 'variant-card-wip'}" data-variant-card="${card.id}">
@@ -496,7 +506,7 @@ export class VariantsUI {
             <span class="variants-eyebrow">За пределами классики</span>
             <h2 class="variants-title">Шахматные вариации</h2>
             <p class="variants-intro">Займите вершину. Объявите три шаха. Найдите свою орбиту игры.</p>
-            <div class="variants-hero-stats"><span><strong>02</strong> режима доступны</span><span>Одна доска — новые стратегии</span></div>
+            <div class="variants-hero-stats"><span><strong>${String(POPULAR_VARIANTS.filter((card) => card.playableVariant).length).padStart(2, '0')}</strong> режима доступны</span><span>Одна доска — новые стратегии</span></div>
           </div>
           <div class="variants-hero-orbit" aria-hidden="true">${ICON_SOLAR}</div>
         </div>
@@ -576,7 +586,7 @@ export class VariantsUI {
     this.container.querySelectorAll<HTMLButtonElement>('[data-play-variant]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const variant = btn.getAttribute('data-play-variant') as VariantId | null;
-        if (variant === 'king-of-the-hill' || variant === 'three-check') {
+        if (variant === 'king-of-the-hill' || variant === 'three-check' || variant === 'chess-960') {
           this.setupModal.open(variant);
         }
       });

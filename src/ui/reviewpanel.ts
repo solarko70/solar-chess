@@ -469,7 +469,7 @@ export class ReviewPanelUI {
       overlay.scrollTop = 0;
     }
     this.store.setReviewMode(true);
-    if (this.store.getLiveState().history.length < 2) {
+    if (this.store.getLiveState().history.length < (this.store.getVariant() === 'chess-960' ? 1 : 2)) {
       return;
     }
     const targetDepth =

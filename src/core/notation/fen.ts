@@ -70,6 +70,30 @@ export function parseFEN(fen: string, width = 8, height = 8, variant: VariantId 
     black: { kingside: castlingPart.includes('k'), queenside: castlingPart.includes('q') },
   };
 
+  if (variant === 'chess-960') {
+    for (const color of ['white', 'black'] as const) {
+      const base = (color === 'white' ? height - 1 : 0) * width;
+      const kingFrom = board.pieces.findIndex((p, sq) => p?.type === 'king' && p.color === color && Math.floor(sq / width) === base / width);
+      const rights = castlingRights[color];
+      rights.kingside = rights.queenside = false;
+      rights.kingFrom = kingFrom;
+      for (const symbol of castlingPart) {
+        if (symbol === '-' || (symbol === symbol.toUpperCase()) !== (color === 'white')) continue;
+        const upper = symbol.toUpperCase();
+        let file = upper.charCodeAt(0) - 65;
+        if (upper === 'K' || upper === 'Q') {
+          const rooks = board.pieces.flatMap((p, sq) => p?.type === 'rook' && p.color === color && Math.floor(sq / width) === base / width ? [sq] : []);
+          const eligible = rooks.filter((sq) => upper === 'K' ? sq > kingFrom : sq < kingFrom);
+          file = (upper === 'K' ? Math.max(...eligible) : Math.min(...eligible)) - base;
+        }
+        if (file < 0 || file >= width || kingFrom < 0 || base + file === kingFrom) continue;
+        const side = base + file > kingFrom ? 'kingside' : 'queenside';
+        rights[side] = true;
+        rights[`${side}Rook`] = base + file;
+      }
+    }
+  }
+
   let enPassantSquare: Square | null = null;
   if (epPart !== '-' && epPart.length >= 2) {
     const file = epPart.charCodeAt(0) - 97; // 'a' = 97
@@ -102,8 +126,24 @@ export function parseFEN(fen: string, width = 8, height = 8, variant: VariantId 
   return state;
 }
 
+function castlingField(state: GameState): string {
+  let field = '';
+  for (const color of ['white', 'black'] as const) {
+    const rights = state.castlingRights[color];
+    for (const side of ['kingside', 'queenside'] as const) {
+      if (!rights[side]) continue;
+      const rookFrom = rights[`${side}Rook`];
+      const symbol = state.variant === 'chess-960' && rookFrom !== undefined
+        ? String.fromCharCode(65 + rookFrom % state.board.width)
+        : side === 'kingside' ? 'K' : 'Q';
+      field += color === 'white' ? symbol : symbol.toLowerCase();
+    }
+  }
+  return field || '-';
+}
+
 export function serializeFEN(state: GameState): string {
-  const { board, turn, castlingRights, enPassantSquare, halfMoveClock, fullMoveNumber } = state;
+  const { board, turn, enPassantSquare, halfMoveClock, fullMoveNumber } = state;
   const { width, height } = board;
 
   const rows: string[] = [];
@@ -131,12 +171,7 @@ export function serializeFEN(state: GameState): string {
   const boardStr = rows.join('/');
   const turnStr = turn === 'white' ? 'w' : 'b';
 
-  let castlingStr = '';
-  if (castlingRights.white.kingside) castlingStr += 'K';
-  if (castlingRights.white.queenside) castlingStr += 'Q';
-  if (castlingRights.black.kingside) castlingStr += 'k';
-  if (castlingRights.black.queenside) castlingStr += 'q';
-  if (castlingStr === '') castlingStr = '-';
+  const castlingStr = castlingField(state);
 
   let epStr = '-';
   if (enPassantSquare !== null) {
@@ -150,7 +185,7 @@ export function serializeFEN(state: GameState): string {
 }
 
 export function positionKey(state: GameState): string {
-  const { board, turn, castlingRights, enPassantSquare } = state;
+  const { board, turn, enPassantSquare } = state;
   const { width, height } = board;
 
   const rows: string[] = [];
@@ -178,12 +213,7 @@ export function positionKey(state: GameState): string {
   const boardStr = rows.join('/');
   const turnStr = turn === 'white' ? 'w' : 'b';
 
-  let castlingStr = '';
-  if (castlingRights.white.kingside) castlingStr += 'K';
-  if (castlingRights.white.queenside) castlingStr += 'Q';
-  if (castlingRights.black.kingside) castlingStr += 'k';
-  if (castlingRights.black.queenside) castlingStr += 'q';
-  if (castlingStr === '') castlingStr = '-';
+  const castlingStr = castlingField(state);
 
   // An en passant square is only meaningful for threefold repetition
   // if an enemy pawn can legally capture on it.

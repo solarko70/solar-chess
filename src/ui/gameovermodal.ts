@@ -588,8 +588,8 @@ export class GameOverModalUI {
     this.reviewBtn.textContent = isVariant ? 'Просмотр партии' : 'Разбор партии';
     this.reviewBtn.classList.toggle('btn-replay-variant', isVariant);
     this.reviewBtn.dataset.action = isVariant ? 'replay' : 'review';
-    this.variantsMenuBtn.hidden = !isVariant;
-    this.variantsMenuBtn.disabled = !isVariant;
+    this.variantsMenuBtn.hidden = this.store.getVariant() === 'standard';
+    this.variantsMenuBtn.disabled = this.store.getVariant() === 'standard';
     this.playersEl.hidden = !isVariant;
 
     // Determine winner

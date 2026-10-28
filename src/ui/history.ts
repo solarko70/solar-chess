@@ -129,7 +129,7 @@ export class HistoryArchiveUI {
     card.innerHTML = `<header class="history-card-header">
       <span class="card-badge archive-result archive-result-${record.result}">${t(`history.${record.result}`)}</span>
       <span class="card-variant-badge variant-${record.variant}" data-variant="${record.variant}">${{
-        standard: 'Классика', 'king-of-the-hill': 'Царь горы', 'three-check': 'Три шаха',
+        standard: 'Классика', 'king-of-the-hill': 'Царь горы', 'three-check': 'Три шаха', 'chess-960': 'Chess 960',
       }[record.variant]}</span>
       <time class="card-date" datetime="${new Date(record.timestamp).toISOString()}">${escapeHistoryText(record.dateFormatted)}</time>
     </header>
@@ -695,7 +695,7 @@ export class HistoryUI {
       this.mistakeNavEl.style.display = 'none';
     }
 
-    let replayState = this.store.supportsClassicalAnalysis()
+    let replayState = this.store.supportsClassicalAnalysis() && this.store.getVariant() !== 'chess-960'
       ? classicalRuleSet.getInitialState() : this.store.getStateAtPly(-1);
     const sans: string[] = [];
     for (let i = 0; i < history.length; i++) {

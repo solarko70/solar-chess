@@ -2,6 +2,7 @@ import type { Color, GameState, Move, Piece, PieceType } from '../types';
 import { toCoords, toSquare, inBounds } from '../board';
 import { PIECE_DEFS } from '../pieces';
 import { copyCastling, isSquareAttacked } from './apply';
+import { canCastle960 } from '../rules/chess960';
 
 const PROMOTION_PIECES: PieceType[] = ['queen', 'rook', 'bishop', 'knight'];
 
@@ -101,7 +102,15 @@ export function generatePseudoLegal(state: GameState): Move[] {
 
       // Castling
       const backRank = color === 'white' ? height - 1 : 0;
-      if (y === backRank && x === 4) {
+      if (state.variant === 'chess-960') {
+        const rights = state.castlingRights[color];
+        for (const side of ['kingside', 'queenside'] as const) {
+          const rookFrom = rights[`${side}Rook`];
+          if (rights[side] && rights.kingFrom === sq && rookFrom !== undefined && canCastle960(board, color, sq, rookFrom, side)) {
+            pushMove(moves, sq, toSquare(side === 'kingside' ? 6 : 2, backRank, width), piece, undefined, state, { castling: side, castlingRookFrom: rookFrom });
+          }
+        }
+      } else if (y === backRank && x === 4) {
         const rights = state.castlingRights[color];
 
         // Kingside castling (e1 -> g1 or e8 -> g8)
@@ -209,6 +218,7 @@ function pushMove(
   options?: {
     promotion?: PieceType;
     castling?: 'kingside' | 'queenside';
+    castlingRookFrom?: number;
     isEnPassant?: boolean;
     capturedAt?: number;
   },
@@ -225,6 +235,7 @@ function pushMove(
     prevPositionHistory: state.positionHistory,
     promotion: options?.promotion,
     castling: options?.castling,
+    castlingRookFrom: options?.castlingRookFrom,
     isEnPassant: options?.isEnPassant,
   });
 }

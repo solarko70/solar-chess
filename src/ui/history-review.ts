@@ -6,6 +6,7 @@ import { ChessBoardUI } from './board';
 import { HistoryUI } from './history';
 import { ReviewPanelUI } from './reviewpanel';
 import { buildReviewScene } from './space-scenes';
+import { packGameReview, restoreGameReview } from '@/storage/review';
 
 /** Reuses the review shell while keeping the live game's components detached and intact. */
 export class ArchivedGameReviewUI {
@@ -21,6 +22,9 @@ export class ArchivedGameReviewUI {
   constructor(private overlay: HTMLElement, record: GameRecord, private onClose: () => void) {
     this.store.setVariant(record.variant);
     if (!this.store.loadPGN(record.pgn)) throw new Error('Invalid archived PGN');
+    if (record.variant === 'chess-960') {
+      this.store.setReviewResult(restoreGameReview(record.pgn, record.review));
+    }
     this.store.setActiveGame(false);
     this.store.setReviewMode(true);
     this.store.setAllowVariations(true);
@@ -57,6 +61,7 @@ export class ArchivedGameReviewUI {
       const existing = getGameById(record.id);
       if (!existing) return;
       saveGameToHistory({ ...existing,
+        ...(record.variant === 'chess-960' ? { review: packGameReview(review) } : {}),
         whiteAccuracy: review.accuracy.white, blackAccuracy: review.accuracy.black,
         whiteElo: getSidePerformanceRating(review, 'white') ?? undefined,
         blackElo: getSidePerformanceRating(review, 'black') ?? undefined,

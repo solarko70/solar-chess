@@ -3,7 +3,7 @@
  */
 import type { GameState, Move } from '@/core';
 import type { TimeControlMode } from '@/state/clock';
-import { analyzePosition, type Score } from './api';
+import { analyzePosition, type AnalysisResult, type Score } from './api';
 import { MAX_DEPTH } from './search';
 
 export type LevelId = 'novice' | 'student' | 'amateur' | 'club' | 'candidate' | 'expert' | 'master' | 'singularity';
@@ -194,7 +194,6 @@ function moverValue(score: Score, whiteToMove: boolean): number {
  */
 export function findBestMove(state: GameState, level: LevelId | LevelConfig, options: FindMoveOptions = {}): Move | null {
   const cfg = typeof level === 'string' ? LEVELS[level] : level;
-  const rng = options.rng ?? Math.random;
 
   // Request up to 10 lines when blunderChance > 0 so blunders can pick from weaker moves in top-10
   const multiPV = cfg.blunderChance > 0 ? Math.max(cfg.topMoves, 10) : Math.max(1, cfg.topMoves);
@@ -209,6 +208,14 @@ export function findBestMove(state: GameState, level: LevelId | LevelConfig, opt
     multiPV,
     quiescence: cfg.quiescence,
   });
+
+  return selectLevelMove(state, cfg, res, options);
+}
+
+/** Apply the same human-like move selection to internal and Stockfish searches. */
+export function selectLevelMove(state: GameState, cfg: LevelConfig, res: AnalysisResult, options: FindMoveOptions = {}): Move | null {
+  const rng = options.rng ?? Math.random;
+  const isVariant = state.variant === 'king-of-the-hill' || state.variant === 'three-check';
 
   if (!res.bestMove) return null;
   if (isVariant && !options.rng) return res.bestMove;

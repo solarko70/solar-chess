@@ -1,4 +1,5 @@
 import type { GameState } from '@/core';
+import { serializeFEN, undoMove } from '@/core';
 import { APP_NAME } from '@/config';
 import type { GameReviewResult, ReviewedMove } from './review';
 import { scoreToCp } from './winchance';
@@ -18,10 +19,22 @@ export function formatEvalComment(score: ReviewedMove['evalAfter']): string {
 }
 
 export function exportReviewedPGN(
-  _state: GameState,
+  state: GameState,
   review: GameReviewResult,
   metadata?: Record<string, string>,
 ): string {
+  const variantHeaders: Record<string, string> = {};
+  let firstMoveNumber = 1;
+  let startsBlack = false;
+  if (state.variant === 'chess-960') {
+    let initial = state;
+    while (initial.history.length) initial = undoMove(initial);
+    firstMoveNumber = initial.fullMoveNumber;
+    startsBlack = initial.turn === 'black';
+    variantHeaders.Variant = 'Chess960';
+    variantHeaders.SetUp = '1';
+    variantHeaders.FEN = serializeFEN(initial);
+  }
   const headers: Record<string, string> = {
     Event: metadata?.Event ?? 'Casual Game',
     Site: metadata?.Site ?? APP_NAME,
@@ -33,6 +46,7 @@ export function exportReviewedPGN(
     WhiteAccuracy: review.accuracy.white.toFixed(1),
     BlackAccuracy: review.accuracy.black.toFixed(1),
     Annotator: review.engineName,
+    ...variantHeaders,
     ...metadata,
   };
 
@@ -45,11 +59,11 @@ export function exportReviewedPGN(
   const tokens: string[] = [];
   for (let i = 0; i < review.moves.length; i++) {
     const m = review.moves[i];
-    const moveNum = Math.floor(i / 2) + 1;
+    const moveNum = Math.floor((i + Number(startsBlack)) / 2) + firstMoveNumber;
     const nag = classToNAG(m.class);
     const evalComment = formatEvalComment(m.evalAfter);
 
-    if (i % 2 === 0) {
+    if ((i + Number(startsBlack)) % 2 === 0) {
       tokens.push(`${moveNum}.`);
       tokens.push(`${m.san}${nag}`);
       tokens.push(evalComment);

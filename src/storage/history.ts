@@ -1,4 +1,5 @@
 import { classicalRuleSet, parsePGN, serializeFEN, type VariantId } from '@/core';
+import type { StoredGameReview } from './review';
 
 export interface GameRecord {
   id: string;
@@ -19,6 +20,7 @@ export interface GameRecord {
   blackAccuracy?: number;
   whiteElo?: number;
   blackElo?: number;
+  review?: StoredGameReview;
 }
 
 export type GameRecordInput = Omit<GameRecord, 'variant'> & { variant?: VariantId };
@@ -28,7 +30,7 @@ const HISTORY_LIMIT = 100;
 const INITIAL_FEN = serializeFEN(classicalRuleSet.getInitialState());
 
 function hasValidFen(fen: unknown): fen is string {
-  if (typeof fen !== 'string' || !/^(?:[prnbqkPRNBQK1-8]+\/){7}[prnbqkPRNBQK1-8]+ [wb] (?:-|KQ?k?q?|Qk?q?|kq?|q) (?:-|[a-h][36]) \d+ [1-9]\d*$/.test(fen)) return false;
+  if (typeof fen !== 'string' || !/^(?:[prnbqkPRNBQK1-8]+\/){7}[prnbqkPRNBQK1-8]+ [wb] (?:-|[KQkqA-Ha-h]{1,4}) (?:-|[a-h][36]) \d+ [1-9]\d*$/.test(fen)) return false;
   return fen.split(' ')[0].split('/').every((rank) =>
     [...rank].reduce((width, square) => width + (/[1-8]/.test(square) ? Number(square) : 1), 0) === 8);
 }
@@ -40,7 +42,7 @@ function normalizeRecord(record: GameRecordInput): GameRecord {
     variant = pgnVariant === 'king of the hill' || record.reason === 'kingOfTheHill' || record.reason === 'king-of-the-hill-center'
       ? 'king-of-the-hill'
       : pgnVariant === 'three-check' || record.reason === 'threeCheck' || record.reason === 'three-check-win' || record.reason === 'three-check-limit'
-        ? 'three-check' : 'standard';
+        ? 'three-check' : /^(chess\s?960|fischerandom)$/.test(pgnVariant ?? '') ? 'chess-960' : 'standard';
   }
   let finalFen = record.finalFen;
   if (!hasValidFen(finalFen)) {
@@ -62,7 +64,7 @@ function isGameRecord(value: unknown): value is GameRecordInput {
     typeof item.timestamp === 'number' && Number.isFinite(new Date(item.timestamp).getTime()) &&
     typeof item.movesCount === 'number' && Number.isInteger(item.movesCount) && item.movesCount >= 0 &&
     (item.mode === 'bot' || item.mode === 'pvp') &&
-    (item.variant === undefined || ['standard', 'king-of-the-hill', 'three-check'].includes(String(item.variant))) &&
+    (item.variant === undefined || ['standard', 'king-of-the-hill', 'three-check', 'chess-960'].includes(String(item.variant))) &&
     (item.playerColor === 'white' || item.playerColor === 'black') &&
     ['win', 'loss', 'draw'].includes(String(item.result)) &&
     ['whiteAccuracy', 'blackAccuracy', 'whiteElo', 'blackElo'].every((key) =>
@@ -98,8 +100,22 @@ function writeHistory(records: GameRecord[]): boolean {
   try {
     localStorage.setItem(GAME_HISTORY_STORAGE_KEY, JSON.stringify(records));
     return true;
-  } catch {
+  } catch (error) {
     // Storage restrictions or quota exhaustion must not interrupt a game.
+    if ((error as { name?: string })?.name === 'QuotaExceededError') {
+      // Review caches are reproducible; keep PGNs and metadata when space runs out.
+      const reduced = records.map((record) => ({ ...record }));
+      for (let i = reduced.length - 1; i >= 0; i--) {
+        if (!reduced[i].review) continue;
+        delete reduced[i].review;
+        try {
+          localStorage.setItem(GAME_HISTORY_STORAGE_KEY, JSON.stringify(reduced));
+          return true;
+        } catch {
+          // Try the next oldest cache before giving up.
+        }
+      }
+    }
     return false;
   }
 }
@@ -113,6 +129,7 @@ export function saveGameToHistory(record: GameRecordInput): void {
     variant: record.variant ?? (record.pgn === existing?.pgn ? existing.variant : undefined),
     isFavorite: record.isFavorite ?? existing?.isFavorite ?? false,
     finalFen: record.finalFen ?? (record.pgn === existing?.pgn ? existing.finalFen : undefined),
+    review: record.review ?? (record.pgn === existing?.pgn ? existing.review : undefined),
   }));
   writeHistory(records.sort((a, b) => b.timestamp - a.timestamp).slice(0, HISTORY_LIMIT));
 }

@@ -4,6 +4,7 @@ import { exportPGN, serializeFEN } from '@/core';
 import { APP_NAME } from '@/config';
 import { getGameById, saveGameToHistory, type GameRecord } from '@/storage/history';
 import { TIME_CONTROLS, type ChessStore } from './store';
+import { packGameReview } from '@/storage/review';
 
 function createRecord(store: ChessStore): GameRecord {
   const result = store.getLiveGameResult();
@@ -49,6 +50,7 @@ export function trackGameHistory(store: ChessStore): () => void {
     savedId = id;
     lastReview = review;
     if (review) {
+      if (record.variant === 'chess-960') record.review = packGameReview(review);
       record.whiteAccuracy = review.accuracy.white;
       record.blackAccuracy = review.accuracy.black;
       record.whiteElo = getSidePerformanceRating(review, 'white') ?? undefined;

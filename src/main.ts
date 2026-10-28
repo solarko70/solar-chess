@@ -786,7 +786,7 @@ export function initApp(): void {
       if (isReviewOverlayOpen) {
         closeReviewOverlay(false);
       }
-      if (!globalStore.supportsClassicalAnalysis()) {
+      if (globalStore.getVariant() !== 'standard') {
         globalStore.newGame();
         return;
       }
